@@ -14,19 +14,19 @@ __email__ = 'libor.gabaj@gmail.com'
 
 # Custom modules
 # import gbj_pythonlib_sw.config as modConfig
-import credentials as modCredentials
+import credential
 
-db_config_source = {
-  'user': modCredentials.source_db_user,
-  'password': modCredentials.source_db_password,
+source = {
+  'user': credential.source_db_user,
+  'password': credential.source_db_password,
   'host': 'localhost',
   'database': 'gabajovci',
   'raise_on_warnings': True
 }
 
-db_config_target = {
-  'user': modCredentials.target_db_user,
-  'password': modCredentials.target_db_password,
+target = {
+  'user': credential.target_db_user,
+  'password': credential.target_db_password,
   'host': 'localhost',
   'database': 'rodina',
   'raise_on_warnings': True

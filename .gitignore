@@ -1,5 +1,5 @@
 # Sensitive files
-credentials.py
+credential.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

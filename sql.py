@@ -13,12 +13,12 @@ source_codelist_read = (
     "SELECT id AS id"
     ", created AS created, modified AS modified, published AS state"
     ", code_desc AS description, code_name AS title, code_abbr AS alias"
-    " FROM jos_codelist_%s"
+    " FROM jos_codelist_%(table_root)s"
     )
 
 source_agenda_read = (
     "SELECT id AS id"
     ", created AS created, modified AS modified, published AS state"
     ", item_desc AS description, item_name AS title, item_abbr AS alias"
-    " FROM jos_familylist_%s"
+    " FROM jos_familylist_%(table_root)s"
     )
