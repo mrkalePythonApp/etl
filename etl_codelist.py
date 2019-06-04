@@ -28,20 +28,48 @@ import sql
 cmdline = None  # Object with command line arguments
 logger = None  # Object with standard logging
 
-script_pathname = ''  # Name of this script including full path
-script_basename = ''  # Name of this script excluding path but with extension
-script_name = ''  # Bare name of this script
+
+script = {
+    'fullname': '',  # Name of this script including full path
+    'basename': '',  # Name of this script excluding path but with extension
+    'name': '',  # Bare name of this script
+}
+
+source = {
+    'conn': None,
+    'query': None,
+    'cursor': None,
+}
+
+
+###############################################################################
+# Enumeration and parameter classes
+###############################################################################
+class Script:
+    """Script parameters."""
+
+    (
+        fullname, basename, name,
+    ) = ('', '', '',)
+
+
+class Source:
+    """Status parameters of the data source."""
+
+    (
+        conn, query, cursor,
+    ) = (None, None, None)
 
 
 ###############################################################################
 # Actions
 ###############################################################################
-def db_connect(dbconfig):
+def connect_db(config):
     """Connect to a database.
 
     Arguments
     ---------
-    dbconfig : dict
+    config : dict
         Connection configuration to a database.
 
     Returns
@@ -56,17 +84,34 @@ def db_connect(dbconfig):
 
     """
     try:
-        conn = mysql.connect(**dbconfig)
+        conn = mysql.connect(**config)
+        logger.debug("Database %s connected", config['database'])
         return conn
     except mysql.Error as err:
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
-            logger.error("Bad database %s credentials", dbconfig.database)
+            logger.error("Bad database %s credentials", config['database'])
         elif err.errno == mysql.errorcode.ER_BAD_DB_ERROR:
-            logger.error("Database %s does not exist", dbconfig.database)
+            logger.error("Database %s does not exist", config['database'])
         else:
             logger.error(err)
         raise Exception(mysql.Error)
-        return None
+
+
+def source_open():
+    """Connect to a source database."""
+    if Source.conn is None:
+        try:
+            Source.conn = connect_db(db.source_config)
+        except Exception:
+            raise
+
+
+def source_close():
+    """Close cursor and connection to a source database."""
+    if Source.cursor is not None:
+        Source.cursor.close()
+    if Source.conn is not None:
+        Source.conn.close()
 
 
 def codelist_read(codelist):
@@ -84,24 +129,32 @@ def codelist_read(codelist):
 
     """
     # Connect to the source database
-    conn_source = db_connect(db.source)
-    if conn_source is None:
+    try:
+        source_open()
+    except Exception:
+        logger.error(
+            'Cannot connect to the source database %s',
+            db.source_config['database']
+            )
         return
     # Execute query
-    query = sql.source_codelist_read % {'table_root': codelist}
-    cursor = conn_source.cursor(dictionary=True)
-    cursor.execute(query)
+    Source.query = sql.query_compose(
+        query_string=sql.source_codelist_read,
+        table_prefix=sql.source_codelist_prefix,
+        table_root=codelist,
+        )
+    Source.cursor = Source.conn.cursor(dictionary=True)
+    Source.cursor.execute(Source.query)
     # Process records one by one
-    for record in cursor:
+    for record in Source.cursor:
         print('{id}: {modified}'.format(**record))
     logger.debug(
         'Read %d records from database %s',
-        cursor.rowcount,
-        db.source['database']
+        Source.cursor.rowcount,
+        db.source_config['database']
         )
     # Close cursor and connection to a databases
-    cursor.close()
-    conn_source.close()
+    source_close()
 
 
 ###############################################################################
@@ -109,10 +162,10 @@ def codelist_read(codelist):
 ###############################################################################
 def setup_params():
     """Determine script operational parameters."""
-    global script_fullname, script_basename, script_name, service_flag
-    script_fullname = os.path.splitext(os.path.abspath(__file__))[0]
-    script_basename = os.path.basename(__file__)
-    script_name = os.path.splitext(script_basename)[0]
+    global service_flag
+    Script.fullname = os.path.splitext(os.path.abspath(__file__))[0]
+    Script.basename = os.path.basename(__file__)
+    Script.name = os.path.splitext(Script.basename)[0]
 
 
 def setup_cmdline():
@@ -131,7 +184,7 @@ def setup_cmdline():
     parser.add_argument(
         "-v", "--verbose",
         choices=["debug", "info", "warning", "error", "critical"],
-        default="info",
+        default="debug",
         help="Level of logging to the console."
     )
     # Process command line arguments
@@ -146,7 +199,7 @@ def setup_logger():
         level=getattr(logging, cmdline.verbose.upper()),
         format="%(levelname)s:%(name)s: %(message)s",
     )
-    logger = logging.getLogger(script_name)
+    logger = logging.getLogger(Script.name)
     logger.info("Script started")
 
 

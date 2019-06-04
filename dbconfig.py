@@ -16,7 +16,10 @@ __email__ = 'libor.gabaj@gmail.com'
 # import gbj_pythonlib_sw.config as modConfig
 import credential
 
-source = {
+###############################################################################
+# Source database resources
+###############################################################################
+source_config = {
   'user': credential.source_db_user,
   'password': credential.source_db_password,
   'host': 'localhost',
@@ -24,7 +27,7 @@ source = {
   'raise_on_warnings': True
 }
 
-target = {
+target_config = {
   'user': credential.target_db_user,
   'password': credential.target_db_password,
   'host': 'localhost',
