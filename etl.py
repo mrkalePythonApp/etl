@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list table."""
 __version__ = "0.1.0"
@@ -44,16 +43,16 @@ class Source:
     """Status parameters of the data source."""
 
     (
-        conn, query, cursor, table, database
-    ) = (None, None, None, None, None,)
+        conn, query, cursor, table, database, root,
+    ) = (None, None, None, None, None, None,)
 
 
 class Target:
     """Status parameters of the data target."""
 
     (
-        conn, query, cursor, table, database,
-    ) = (None, None, None, None, None,)
+        conn, query, cursor, table, database, root,
+    ) = (None, None, None, None, None, None,)
 
 
 ###############################################################################
@@ -107,7 +106,7 @@ def source_open():
         except Exception:
             logger.error(
                 'Cannot connect to the source database %s',
-                db.source_config['database']
+                Source.database
                 )
             return False
     return True
@@ -142,7 +141,7 @@ def target_open():
         except Exception:
             logger.error(
                 'Cannot connect to the target database %s',
-                db.source_config['database']
+                Target.database
                 )
             return False
     return True
@@ -204,13 +203,8 @@ def target_truncate(table):
     return True
 
 
-def migrate_codelist(codelist):
-    """Migrate content of a source code list to target one.
-
-    Arguments
-    ---------
-    codelist : str
-        Root name of a code list database table.
+def migrate():
+    """Migrate content of a source table to target one.
 
     Returns
     -------
@@ -219,10 +213,9 @@ def migrate_codelist(codelist):
 
     """
     # Read source table
-    Source.table = sql.source_codelist(codelist)
     Source.query = sql.compose_select(
         table=Source.table,
-        fields=sql.source_fields['codelist'],
+        fields=sql.source[Source.table]['fields'],
         )
     Source.cursor = Source.conn.cursor(dictionary=True)
     try:
@@ -238,7 +231,7 @@ def migrate_codelist(codelist):
         logger.error(err)
         return False
     # Truncate target table
-    Target.table = sql.target_codelist(sql.map_codelist[codelist])
+    Target.table = sql.source[Source.table]['table_target']
     Target.query = sql.compose_truncate(Target.table)
     Target.cursor = Target.conn.cursor()
     try:
@@ -254,8 +247,8 @@ def migrate_codelist(codelist):
     # Insert to target table
     Target.query = sql.compose_insert(
         table=Target.table,
-        fields=sql.target_fields['codelist']['fields'],
-        values=sql.target_fields['codelist']['values'],
+        fields=sql.target[Target.table]['fields'],
+        values=sql.target[Target.table]['values'],
         )
     Target.cursor = Target.conn.cursor()
     try:
@@ -288,11 +281,12 @@ def migrate_codelist(codelist):
         return False
     # Success
     logger.info(
-        'Codelist %s.%s migrated to %s.%s with %d record',
+        'Table %s.%s migrated to %s.%s with %d records',
         Source.database,
         Source.table,
         Target.database,
-        Target.table
+        Target.table,
+        Source.cursor.rowcount
         )
     return True
 
@@ -363,15 +357,29 @@ def main():
     setup_cmdline()
     setup_logger()
     # Connect to source database
+    Source.database = db.source_config['database']
     if not source_open():
         return
-    Source.database = db.source_config['database']
     # Connect to source database
+    Target.database = db.target_config['database']
     if not target_open():
         return
-    Target.database = db.target_config['database']
-    # ETL process
-    migrate_codelist('stay')
+    # Migrate codelists
+    if cmdline.codelist is not None:
+        for codelist in cmdline.codelist.split(','):
+            Source.table = sql.compose_table(
+                sql.source_table_template_codelist,
+                codelist,
+            )
+            migrate()
+    # Migrate agendas
+    if cmdline.agenda is not None:
+        for agenda in cmdline.agenda.split(','):
+            Source.table = sql.compose_table(
+                sql.source_table_template_agenda,
+                agenda,
+            )
+            migrate()
     # Close all databases
     source_close()
     target_close()
