@@ -288,12 +288,11 @@ def migrate_codelist(codelist):
         return False
     # Success
     logger.info(
-        'Codelist %s.%s migrated to %s.%s with %d records',
+        'Codelist %s.%s migrated to %s.%s with %d record',
         Source.database,
         Source.table,
         Target.database,
-        Target.table,
-        Source.cursor.rowcount
+        Target.table
         )
     return True
 
@@ -373,6 +372,9 @@ def main():
     Target.database = db.target_config['database']
     # ETL process
     migrate_codelist('stay')
+    # Close all databases
+    source_close()
+    target_close()
     logger.info("Script finished")
 
 
