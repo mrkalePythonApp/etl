@@ -17,10 +17,14 @@ source_table_template_agenda = 'jos_familylist_%(table_root)s'
 source_table_template_codelist = 'jos_codelist_%(table_root)s'
 source_table_fields_codelist = (
     'id, created, modified, published AS state'
-    ', code_name AS title, code_abbr AS alias, code_desc AS description'
+    ', code_name AS title'
+    ', code_abbr AS alias'
+    ', code_desc AS description'
     )
 source_table_fields_agenda = (
-    'id, created, modified, published AS state, item_desc AS description'
+    'id, created, modified'
+    ', published AS state'
+    ', item_desc AS description'
     ', item_date AS date_on'
     )
 source = {

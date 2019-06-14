@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Module with connection strings to MySQL databases."""
+"""Module with connection strings to a MySQL database.
+
+Notes
+-----
+- For production substitute placeholders with real hosts and database names.
+
+"""
 __version__ = '0.1.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
