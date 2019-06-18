@@ -87,7 +87,52 @@ source = {
             ', item_domain_id AS id_domain'
             ', item_activity_id AS id_activity'
         )
-    }
+    },
+    'jos_familylist_expense': {
+        'table_target': 'lgbj_gbjfamily_expenses',
+        'fields': source_table_fields_agenda + (
+            ', item_name AS title'
+            ', item_units AS quantity'
+            ', item_price_euro AS price'
+            ', item_price_orig AS price_orig'
+            ', item_domain_id AS id_domain'
+            ', item_commodity_id AS id_commodity'
+            ', item_type_id AS id_type'
+            ', item_unit_id AS id_unit'
+            ', item_currency_id AS id_currency'
+        )
+    },
+    'jos_familylist_fuel': {
+        'table_target': 'lgbj_gbjfamily_fuels',
+        'fields': source_table_fields_agenda + (
+            ', item_volume AS quantity'
+            ', item_tacho AS tacho'
+            ', item_period AS period'
+            ', item_distance AS distance'
+            ', item_consumption AS distance'
+            ', item_domain AS id_domain'
+        )
+    },
+    'jos_familylist_income': {
+        'table_target': 'lgbj_gbjfamily_incomes',
+        'fields': source_table_fields_agenda + (
+            ', item_name AS title'
+            ', item_price_euro AS price'
+            ', item_price_orig AS price_orig'
+            ', item_domain_id AS id_domain'
+            ', item_currency_id AS id_currency'
+            ', item_asset_id AS id_asset'
+        )
+    },
+    'jos_familylist_vacation': {
+        'table_target': 'lgbj_gbjfamily_vacations',
+        'fields': source_table_fields_agenda + (
+            ', item_name AS title'
+            ', item_date1 AS date_off'
+            ', item_stay_id AS id_stay'
+            ', item_staff_id AS id_staff'
+        )
+    },
 }
 
 
@@ -104,6 +149,16 @@ target_table_values_codelist = (
     '"", "", "", ""'
     ', %(id)s, %(created)s, %(modified)s, %(state)s'
     ', %(description)s, %(title)s, %(alias)s'
+    )
+target_table_fields_agenda = (
+    'params, metakey, metadesc, metadata'
+    ', id, created, modified, state, description'
+    ', date_on'
+    )
+target_table_values_agenda = (
+    '"", "", "", ""'
+    ', %(id)s, %(created)s, %(modified)s, %(state)s, %(description)s'
+    ', %(date_on)s'
     )
 target_users = 'created_by = %(user)s, modified_by = %(user)s'
 target = {
@@ -147,16 +202,18 @@ target = {
         'fields': target_table_fields_codelist,
         'values': target_table_values_codelist,
     },
-}
-
-# Map of source agenda table roots to target ones
-map_agenda = {
-    'asset': 'assets',
-    'event': 'events',
-    'expense': 'expenses',
-    'fuel': 'fuels',
-    'income': 'incomes',
-    'vacation': 'vacations',
+    'lgbj_gbjfamily_vacations': {
+        'fields': target_table_fields_agenda + (
+            ', title, date_off'
+            ', period'
+            ', id_stay, id_staff'
+        ),
+        'values': target_table_values_agenda + (
+            ', %(title)s, %(date_off)s'
+            ', datediff(%(date_off)s, %(date_on)s) + 1'
+            ', %(id_stay)s, %(id_staff)s'
+        ),
+    },
 }
 
 

@@ -212,6 +212,13 @@ def migrate():
         Flag about successful processing.
 
     """
+    # Check source table
+    if Source.table not in sql.source:
+        logger.warning(
+            'Unexpected source table %s.%s ignored',
+            Source.database, Source.table
+            )
+        return False
     # Read source table
     Source.query = sql.compose_select(
         table=Source.table,
@@ -250,6 +257,7 @@ def migrate():
         fields=sql.target[Target.table]['fields'],
         values=sql.target[Target.table]['values'],
         )
+    print(Target.cursor.statement)
     Target.cursor = Target.conn.cursor()
     try:
         Target.cursor.executemany(Target.query, records)
