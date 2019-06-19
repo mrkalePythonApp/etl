@@ -109,8 +109,8 @@ source = {
             ', item_tacho AS tacho'
             ', item_period AS period'
             ', item_distance AS distance'
-            ', item_consumption AS distance'
-            ', item_domain AS id_domain'
+            ', item_consumption AS consumption'
+            ', item_domain_id AS id_domain'
         )
     },
     'jos_familylist_income': {
@@ -152,12 +152,14 @@ target_table_values_codelist = (
     )
 target_table_fields_agenda = (
     'params, metakey, metadesc, metadata'
-    ', id, created, modified, state, description'
+    ', id, created, state, description'
+    ', modified'
     ', date_on'
     )
 target_table_values_agenda = (
     '"", "", "", ""'
-    ', %(id)s, %(created)s, %(modified)s, %(state)s, %(description)s'
+    ', %(id)s, %(created)s, %(state)s, %(description)s'
+    ', IFNULL(%(modified)s, %(created)s)'
     ', %(date_on)s'
     )
 target_users = 'created_by = %(user)s, modified_by = %(user)s'
@@ -201,6 +203,66 @@ target = {
     'lgbj_gbjcodes_units': {
         'fields': target_table_fields_codelist,
         'values': target_table_values_codelist,
+    },
+    'lgbj_gbjfamily_assets': {
+        'fields': target_table_fields_agenda + (
+            ', title, value, price'
+            ', price_orig'
+            ', id_domain, id_currency, id_asset'
+        ),
+        'values': target_table_values_agenda + (
+            ', %(title)s, %(value)s, %(price)s'
+            ', IF(%(price_orig)s, %(price_orig)s, NULL)'
+            ', %(id_domain)s, %(id_currency)s, %(id_asset)s'
+        ),
+    },
+    'lgbj_gbjfamily_events': {
+        'fields': target_table_fields_agenda + (
+            ', title'
+            ', id_domain, id_activity'
+        ),
+        'values': target_table_values_agenda + (
+            ', %(title)s'
+            ', %(id_domain)s, %(id_activity)s'
+        ),
+    },
+    'lgbj_gbjfamily_expenses': {
+        'fields': target_table_fields_agenda + (
+            ', title, quantity, price'
+            ', price_orig'
+            ', id_domain, id_currency, id_commodity'
+            ', id_type, id_unit'
+        ),
+        'values': target_table_values_agenda + (
+            ', %(title)s, %(quantity)s, %(price)s'
+            ', IF(%(price_orig)s, %(price_orig)s, NULL)'
+            ', %(id_domain)s, %(id_currency)s, %(id_commodity)s'
+            ', %(id_type)s, %(id_unit)s'
+        ),
+    },
+    'lgbj_gbjfamily_fuels': {
+        'fields': target_table_fields_agenda + (
+            ', quantity, tacho, period'
+            ', distance, consumption'
+            ', id_domain'
+        ),
+        'values': target_table_values_agenda + (
+            ', %(quantity)s, %(tacho)s, %(period)s'
+            ', %(distance)s, %(consumption)s'
+            ', %(id_domain)s'
+        ),
+    },
+    'lgbj_gbjfamily_incomes': {
+        'fields': target_table_fields_agenda + (
+            ', title, price'
+            ', price_orig'
+            ', id_domain, id_currency, id_asset'
+        ),
+        'values': target_table_values_agenda + (
+            ', %(title)s, %(price)s'
+            ', IF(%(price_orig)s, %(price_orig)s, NULL)'
+            ', %(id_domain)s, %(id_currency)s, %(id_asset)s'
+        ),
     },
     'lgbj_gbjfamily_vacations': {
         'fields': target_table_fields_agenda + (

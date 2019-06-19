@@ -257,7 +257,6 @@ def migrate():
         fields=sql.target[Target.table]['fields'],
         values=sql.target[Target.table]['values'],
         )
-    print(Target.cursor.statement)
     Target.cursor = Target.conn.cursor()
     try:
         Target.cursor.executemany(Target.query, records)
@@ -269,7 +268,7 @@ def migrate():
             )
     except mysql.Error as err:
         logger.error(err)
-        return False
+        # return False
     # Update user in target table
     Target.query = sql.compose_update(
         table=Target.table,
