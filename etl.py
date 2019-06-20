@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list table."""
 __version__ = "0.1.0"
-__status__ = "Alpha"
+__status__ = "Beta"
 __author__ = "Libor Gabaj"
 __copyright__ = "Copyright 2019, " + __author__
 __credits__ = [__author__]
@@ -79,7 +79,7 @@ def connect_db(config):
     """
     try:
         conn = mysql.connect(**config)
-        logger.info("Database %s connected", config['database'])
+        logger.debug("Database %s connected", config['database'])
         return conn
     except mysql.Error as err:
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
@@ -325,7 +325,7 @@ def setup_cmdline():
     parser.add_argument(
         "-v", "--verbose",
         choices=["debug", "info", "warning", "error", "critical"],
-        default="debug",
+        default="info",
         help="Level of logging to the console."
     )
     parser.add_argument(
