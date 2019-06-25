@@ -229,12 +229,14 @@ target = {
     'lgbj_gbjfamily_expenses': {
         'fields': target_table_fields_agenda + (
             ', title, quantity, price'
+            ', price_unit'
             ', price_orig'
             ', id_domain, id_currency, id_commodity'
             ', id_type, id_unit'
         ),
         'values': target_table_values_agenda + (
             ', %(title)s, %(quantity)s, %(price)s'
+            ', IF(%(quantity)s IN (0, 1), NULL, %(price)s / %(quantity)s)'
             ', IF(%(price_orig)s, %(price_orig)s, NULL)'
             ', %(id_domain)s, %(id_currency)s, %(id_commodity)s'
             ', %(id_type)s, %(id_unit)s'
