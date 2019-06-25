@@ -3,7 +3,8 @@
 
 Notes
 -----
-- For production substitute placeholders with real hosts and database names.
+- For production substitute placeholders in sharp brackets (<...>) with real
+  credentials, hosts, and database names.
 
 """
 __version__ = '0.1.0'
@@ -15,24 +16,21 @@ __license__ = 'MIT'
 __maintainer__ = __author__
 __email__ = 'libor.gabaj@gmail.com'
 
-# Custom modules
-import credential
-
 ###############################################################################
 # Source database resources
 ###############################################################################
 source_config = {
-  'user': credential.source_db_user,
-  'password': credential.source_db_password,
-  'host': 'localhost',
-  'database': 'sourcedb',
+  'user': <myuser>,
+  'password': <mypassword>,
+  'host': '<localhost>',
+  'database': '<sourcedb>',
   'raise_on_warnings': True
 }
 
 target_config = {
-  'user': credential.target_db_user,
-  'password': credential.target_db_password,
-  'host': 'localhost',
-  'database': 'targetdb',
+  'user': <myuser>,
+  'password': <mypassword>,
+  'host': '<localhost>',
+  'database': '<targetdb>',
   'raise_on_warnings': True
 }
