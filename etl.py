@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list table."""
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __status__ = "Beta"
 __author__ = "Libor Gabaj"
 __copyright__ = "Copyright 2019, " + __author__
@@ -288,12 +288,13 @@ def migrate():
         return False
     # Success
     logger.info(
-        'Table %s.%s migrated to %s.%s with %d records',
+        'Table %s.%s migrated to %s.%s with %d records under user %d',
         Source.database,
         Source.table,
         Target.database,
         Target.table,
-        Source.cursor.rowcount
+        Source.cursor.rowcount,
+        cmdline.user,
         )
     return True
 
@@ -342,6 +343,11 @@ def setup_cmdline():
         default=0,
         help="Joomla! user id for migrated records."
     )
+    parser.add_argument(
+        "-l", "--list",
+        action='store_true',
+        help="List of migrated codelists and agendas."
+    )
     # Process command line arguments
     global cmdline
     cmdline = parser.parse_args()
@@ -355,7 +361,6 @@ def setup_logger():
         format="%(levelname)s:%(name)s: %(message)s",
     )
     logger = logging.getLogger(Script.name)
-    logger.info("Script started")
 
 
 def main():
@@ -363,6 +368,30 @@ def main():
     setup_params()
     setup_cmdline()
     setup_logger()
+    # Print list of migrated sources
+    if cmdline.list:
+        # Codelists
+        tables = {
+            k: v for k, v in sql.source.items()
+            if k.startswith(sql.source_table_prefix_codelist)
+            }.keys()
+        roots = ', '.join([
+            k.replace(sql.source_table_prefix_codelist, '', 1)
+            for k in tables
+            ])
+        print('Migrated codelists: {}'.format(roots))
+        # Agendas
+        tables = {
+            k: v for k, v in sql.source.items()
+            if k.startswith(sql.source_table_prefix_agenda)
+            }.keys()
+        roots = ', '.join([
+            k.replace(sql.source_table_prefix_agenda, '', 1)
+            for k in tables
+            ])
+        print('Migrated agendas: {}'.format(roots))
+        return
+    logger.info("Migration started")
     # Connect to source database
     Source.database = db.source_config['database']
     if not source_open():
@@ -375,7 +404,7 @@ def main():
     if cmdline.codelist is not None:
         for codelist in cmdline.codelist.split(','):
             Source.table = sql.compose_table(
-                sql.source_table_template_codelist,
+                sql.source_table_prefix_codelist,
                 codelist,
             )
             migrate()
@@ -383,14 +412,14 @@ def main():
     if cmdline.agenda is not None:
         for agenda in cmdline.agenda.split(','):
             Source.table = sql.compose_table(
-                sql.source_table_template_agenda,
+                sql.source_table_prefix_agenda,
                 agenda,
             )
             migrate()
     # Close all databases
     source_close()
     target_close()
-    logger.info("Script finished")
+    logger.info("Migration finished")
 
 
 if __name__ == "__main__":

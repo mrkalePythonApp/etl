@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module with SQL DML strings for MySQL databases."""
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -13,8 +13,8 @@ __email__ = 'libor.gabaj@gmail.com'
 ###############################################################################
 # Source database
 ###############################################################################
-source_table_template_agenda = 'jos_familylist_%(table_root)s'
-source_table_template_codelist = 'jos_codelist_%(table_root)s'
+source_table_prefix_agenda = 'jos_familylist_'
+source_table_prefix_codelist = 'jos_codelist_'
 source_table_fields_codelist = (
     'id, created, modified, published AS state'
     ', code_name AS title'
@@ -139,8 +139,8 @@ source = {
 ###############################################################################
 # Target database
 ###############################################################################
-target_table_template_agenda = 'lgbj_gbjfamily_%(table_root)s'
-target_table_template_codelist = 'lgbj_gbjcodes_%(table_root)s'
+target_table_prefix_agenda = 'lgbj_gbjfamily_'
+target_table_prefix_codelist = 'lgbj_gbjcodes_'
 target_table_fields_codelist = (
     'params, metakey, metadesc, metadata'
     ', id, created, modified, state, description, title, alias'
@@ -281,13 +281,13 @@ target = {
 }
 
 
-def compose_table(table_template, table_root):
-    """Compose source table name for a codelist.
+def compose_table(table_prefix, table_root):
+    """Compose real source table name.
 
     Arguments
     ---------
-    table_template : str
-        Template for a table name.
+    table_prefix : str
+        Prefix for of a table.
     table_root : str
         Specific part of a table name.
 
@@ -297,7 +297,7 @@ def compose_table(table_template, table_root):
         Real table name.
 
     """
-    table_name = table_template % {'table_root': table_root}
+    table_name = table_prefix + table_root
     return table_name
 
 
