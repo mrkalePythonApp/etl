@@ -370,26 +370,17 @@ def main():
     setup_logger()
     # Print list of migrated sources
     if cmdline.list:
-        # Codelists
-        tables = {
-            k: v for k, v in sql.source.items()
-            if k.startswith(sql.source_table_prefix_codelist)
-            }.keys()
-        roots = ', '.join([
-            k.replace(sql.source_table_prefix_codelist, '', 1)
-            for k in tables
-            ])
-        print('Migrated codelists: {}'.format(roots))
-        # Agendas
-        tables = {
-            k: v for k, v in sql.source.items()
-            if k.startswith(sql.source_table_prefix_agenda)
-            }.keys()
-        roots = ', '.join([
-            k.replace(sql.source_table_prefix_agenda, '', 1)
-            for k in tables
-            ])
-        print('Migrated agendas: {}'.format(roots))
+        sources = {
+            'codelists': sql.source_table_prefix_codelist,
+            'agendas': sql.source_table_prefix_agenda,
+        }
+        for source, prefix in sources.items():
+            tables = {
+                k: v for k, v in sql.source.items()
+                if k.startswith(prefix)
+                }.keys()
+            roots = ', '.join([k.replace(prefix, '', 1) for k in tables])
+            print('Migrated {}: {}'.format(source, roots))
         return
     logger.info("Migration started")
     # Connect to source database
