@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module with SQL DML strings for MySQL databases."""
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -141,6 +141,7 @@ source = {
 ###############################################################################
 target_table_prefix_agenda = 'lgbj_gbjfamily_'
 target_table_prefix_codelist = 'lgbj_gbjcodes_'
+target_table_register_codelist = 'codebooks'
 target_table_fields_codelist = (
     'params, metakey, metadesc, metadata'
     ', id, created, modified, state, description, title, alias'
@@ -346,7 +347,7 @@ def compose_insert(table, fields, values):
 
 
 def compose_update(table, fields):
-    """Compose update query string.
+    """Compose update query string for migrated table.
 
     Arguments
     ---------
@@ -363,6 +364,32 @@ def compose_update(table, fields):
 
     """
     query = 'UPDATE {} SET {}'.format(table, fields)
+    return query
+
+
+def compose_update_register(register, table, fields):
+    """Compose update query string for registration table.
+
+    Arguments
+    ---------
+    register : str
+        Real name of a registration table.
+    table : str
+        Real name of a migrated table.
+    fields : str
+        List of table fields.
+
+    Returns
+    -------
+    str
+        Query string with real table name. However, it can contain placeholders
+        for field values.
+
+    """
+    # Extract table root
+    root = table.replace(target_table_prefix_codelist, '', 1).replace(
+        target_table_prefix_agenda, '', 1)
+    query = "UPDATE {} SET {} WHERE alias='{}'".format(register, fields, root)
     return query
 
 

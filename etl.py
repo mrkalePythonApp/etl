@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list table."""
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __status__ = "Beta"
 __author__ = "Libor Gabaj"
 __copyright__ = "Copyright 2019, " + __author__
@@ -51,8 +51,8 @@ class Target:
     """Status parameters of the data target."""
 
     (
-        conn, query, cursor, table, database, root,
-    ) = (None, None, None, None, None, None,)
+        conn, query, cursor, table, database, root, register,
+    ) = (None, None, None, None, None, None, None,)
 
 
 ###############################################################################
@@ -286,6 +286,26 @@ def migrate():
     except mysql.Error as err:
         logger.error(err)
         return False
+    # Update user in registration table
+    if Target.register:
+        Target.query = sql.compose_update_register(
+            register=Target.register,
+            table=Target.table,
+            fields=sql.target_users,
+            )
+        print('Register', Target.query)
+        Target.cursor = Target.conn.cursor()
+        try:
+            Target.cursor.execute(Target.query, {'user': cmdline.user})
+            logger.debug(
+                'Updated %d records in table %s.%s',
+                Target.cursor.rowcount,
+                Target.database,
+                Target.register
+                )
+        except mysql.Error as err:
+            logger.error(err)
+            return False
     # Success
     logger.info(
         'Table %s.%s migrated to %s.%s with %d records under user %d',
@@ -393,6 +413,10 @@ def main():
         return
     # Migrate codelists
     if cmdline.codelist is not None:
+        Target.register = sql.compose_table(
+            sql.target_table_prefix_codelist,
+            sql.target_table_register_codelist,
+        )
         for codelist in cmdline.codelist.split(','):
             Source.table = sql.compose_table(
                 sql.source_table_prefix_codelist,
