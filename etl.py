@@ -423,6 +423,7 @@ def main():
                 codelist,
             )
             migrate()
+        Target.register = None
     # Migrate agendas
     if cmdline.agenda is not None:
         for agenda in cmdline.agenda.split(','):
