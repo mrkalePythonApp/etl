@@ -276,7 +276,6 @@ def main():
     # Updates
     if cmdline.codelists or cmdline.agendas:
         if cmdline.user:
-            logger.info('User update started')
             if cmdline.codelists:
                 tables = update_users(Target.codelists)
                 logger.info(
