@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Script for migrating individual code list table."""
-__version__ = "0.3.0"
-__status__ = "Beta"
-__author__ = "Libor Gabaj"
-__copyright__ = "Copyright 2019, " + __author__
+"""Script for migrating individual code list or agenda table."""
+__version__ = '0.4.0'
+__status__ = 'Beta'
+__author__ = 'Libor Gabaj'
+__copyright__ = 'Copyright 2019, ' + __author__
 __credits__ = [__author__]
-__license__ = "MIT"
+__license__ = 'MIT'
 __maintainer__ = __author__
-__email__ = "records.gabaj@gmail.com"
+__email__ = 'libor.gabaj@gmail.com'
 
 # Standard library modules
 import os
-import os.path
 import argparse
 import logging
 import mysql.connector as mysql
@@ -79,13 +78,13 @@ def connect_db(config):
     """
     try:
         conn = mysql.connect(**config)
-        logger.debug("Database %s connected", config['database'])
+        logger.debug('Database %s connected', config['database'])
         return conn
     except mysql.Error as err:
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
-            logger.error("Bad database %s credentials", config['database'])
+            logger.error('Bad database %s credentials', config['database'])
         elif err.errno == mysql.errorcode.ER_BAD_DB_ERROR:
-            logger.error("Database %s does not exist", config['database'])
+            logger.error('Database %s does not exist', config['database'])
         else:
             logger.error(err)
         raise
@@ -159,48 +158,6 @@ def target_close():
     Target.query = None
     Target.cursor = None
     Target.table = None
-
-
-def target_truncate(table):
-    """Empty table in the target database.
-
-    Arguments
-    ---------
-    table : str
-        Root name of a database table to be truncated.
-
-    Returns
-    -------
-    boolean
-        Flag about successful processing.
-
-    """
-    # Connect to the database
-    if not target_open():
-        return False
-    # Execute query
-    Target.table = sql.table_compose(
-        table_prefix=sql.target_codelist_prefix,
-        table_root=table
-        )
-    Target.query = sql.query_compose(
-        query_string=sql.table_truncate,
-        table_name=Target.table
-        )
-    Target.cursor = Target.conn.cursor()
-    try:
-        Target.cursor.execute(Target.query)
-        Target.cursor.close()
-        logger.info(
-            "Table %s.%s truncated",
-            db.target_config['database'],
-            Target.table
-            )
-    except mysql.Error as err:
-        logger.error(err)
-        target_close()
-        return False
-    return True
 
 
 def migrate():
@@ -333,40 +290,40 @@ def setup_params():
 def setup_cmdline():
     """Define command line arguments."""
     parser = argparse.ArgumentParser(
-        description="ETL for individual code list, version "
+        description='Migration individual code lists and agendas, version '
         + __version__
     )
     # Options
     parser.add_argument(
-        "-V", "--version",
-        action="version",
+        '-V', '--version',
+        action='version',
         version=__version__,
-        help="Current version of the script."
+        help='Current version of the script.'
     )
     parser.add_argument(
-        "-v", "--verbose",
-        choices=["debug", "info", "warning", "error", "critical"],
-        default="info",
-        help="Level of logging to the console."
+        '-v', '--verbose',
+        choices=['debug', 'info', 'warning', 'error', 'critical'],
+        default='info',
+        help='Level of logging to the console.'
     )
     parser.add_argument(
-        "-c", "--codelist",
-        help="Codelist or comma separated list of them for migration."
+        '-c', '--codelist',
+        help='Codelist or comma separated list of them for migration.'
     )
     parser.add_argument(
-        "-a", "--agenda",
-        help="Agenda or comma separated list of them for migration."
+        '-a', '--agenda',
+        help='Agenda or comma separated list of them for migration.'
     )
     parser.add_argument(
-        "-u", "--user",
+        '-u', '--user',
         type=int,
         default=0,
-        help="Joomla! user id for migrated records."
+        help='Joomla! user id for migrated records.'
     )
     parser.add_argument(
-        "-l", "--list",
+        '-l', '--list',
         action='store_true',
-        help="List of migrated codelists and agendas."
+        help='List of migrated codelists and agendas.'
     )
     # Process command line arguments
     global cmdline
@@ -378,7 +335,7 @@ def setup_logger():
     global logger
     logging.basicConfig(
         level=getattr(logging, cmdline.verbose.upper()),
-        format="%(levelname)s:%(name)s: %(message)s",
+        format='%(levelname)s:%(name)s: %(message)s',
     )
     logger = logging.getLogger(Script.name)
 
@@ -402,12 +359,12 @@ def main():
             roots = ', '.join([k.replace(prefix, '', 1) for k in tables])
             print('Migrated {}: {}'.format(source, roots))
         return
-    logger.info("Migration started")
+    logger.info('Migration started')
     # Connect to source database
     Source.database = db.source_config['database']
     if not source_open():
         return
-    # Connect to source database
+    # Connect to target database
     Target.database = db.target_config['database']
     if not target_open():
         return
@@ -435,8 +392,8 @@ def main():
     # Close all databases
     source_close()
     target_close()
-    logger.info("Migration finished")
+    logger.info('Migration finished')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

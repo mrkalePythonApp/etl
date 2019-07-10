@@ -288,7 +288,7 @@ def compose_table(table_prefix, table_root):
     Arguments
     ---------
     table_prefix : str
-        Prefix for of a table.
+        Prefix of a table.
     table_root : str
         Specific part of a table name.
 
@@ -408,4 +408,22 @@ def compose_truncate(table):
 
     """
     query = 'TRUNCATE TABLE {}'.format(table)
+    return query
+
+
+def compose_tablelist(table_prefix):
+    """Compose query for list of table names with particular prefix.
+
+    Arguments
+    ---------
+    table_prefix : str
+        Prefix of tables.
+
+    Returns
+    -------
+    str
+        Query string with real table names with input table prefix.
+
+    """
+    query = "SHOW TABLES LIKE '{}%'".format(table_prefix)
     return query
