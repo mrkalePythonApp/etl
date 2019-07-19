@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list or agenda table."""
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -42,8 +42,8 @@ class Source:
     """Status parameters of the data source."""
 
     (
-        conn, query, cursor, table, database, root,
-    ) = (None, None, None, None, None, None,)
+        conn, query, cursor, table, database, root, ALL,
+    ) = (None, None, None, None, None, None, '*')
 
 
 class Target:
@@ -250,7 +250,6 @@ def migrate():
             table=Target.table,
             fields=sql.target_users,
             )
-        print('Register', Target.query)
         Target.cursor = Target.conn.cursor()
         try:
             Target.cursor.execute(Target.query, {'user': cmdline.user})
@@ -308,11 +307,13 @@ def setup_cmdline():
     )
     parser.add_argument(
         '-c', '--codelist',
-        help='Codelist or comma separated list of them for migration.'
+        help='Codelist, comma separated list of them,'
+             ' or asterisk for all supported.'
     )
     parser.add_argument(
         '-a', '--agenda',
-        help='Agenda or comma separated list of them for migration.'
+        help='Agenda, comma separated list of them,'
+             ' or asterisk for all supported.'
     )
     parser.add_argument(
         '-u', '--user',
@@ -374,21 +375,39 @@ def main():
             sql.target_table_prefix_codelist,
             sql.target_table_register_codelist,
         )
-        for codelist in cmdline.codelist.split(','):
-            Source.table = sql.compose_table(
-                sql.source_table_prefix_codelist,
-                codelist,
-            )
-            migrate()
+        if cmdline.codelist == Source.ALL:
+            tables = [
+                k for k, v in sql.source.items()
+                if k.startswith(sql.source_table_prefix_codelist)
+                ]
+            for table in tables:
+                Source.table = table
+                migrate()
+        else:
+            for codelist in cmdline.codelist.split(','):
+                Source.table = sql.compose_table(
+                    sql.source_table_prefix_codelist,
+                    codelist,
+                )
+                migrate()
         Target.register = None
     # Migrate agendas
     if cmdline.agenda is not None:
-        for agenda in cmdline.agenda.split(','):
-            Source.table = sql.compose_table(
-                sql.source_table_prefix_agenda,
-                agenda,
-            )
-            migrate()
+        if cmdline.agenda == Source.ALL:
+            tables = [
+                k for k, v in sql.source.items()
+                if k.startswith(sql.source_table_prefix_agenda)
+                ]
+            for table in tables:
+                Source.table = table
+                migrate()
+        else:
+            for agenda in cmdline.agenda.split(','):
+                Source.table = sql.compose_table(
+                    sql.source_table_prefix_agenda,
+                    agenda,
+                )
+                migrate()
     # Close all databases
     source_close()
     target_close()

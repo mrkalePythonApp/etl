@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module with SQL DML strings for MariaDB databases."""
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -237,7 +237,8 @@ target = {
         ),
         'values': target_table_values_agenda + (
             ', %(title)s, %(quantity)s, %(price)s'
-            ', IF(%(quantity)s IN (0, 1), NULL, %(price)s / %(quantity)s)'
+            ', IF(%(quantity)s IN (0, 1), NULL,'
+            ' ROUND(%(price)s / %(quantity)s, 4))'
             ', IF(%(price_orig)s, %(price_orig)s, NULL)'
             ', %(id_domain)s, %(id_currency)s, %(id_commodity)s'
             ', %(id_type)s, %(id_unit)s'
