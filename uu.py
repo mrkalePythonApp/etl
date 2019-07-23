@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for updating user ids in target codelist and agenda tables."""
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -151,7 +151,7 @@ def setup_cmdline():
     parser.add_argument(
         '-a', '--agendas',
         action='store_true',
-        help='Updatep all target agenda tables.'
+        help='Update all target agenda tables.'
     )
     parser.add_argument(
         '-u', '--user',
