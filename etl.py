@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list or agenda table."""
-__version__ = '0.5.0'
+__version__ = '0.5.1'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -280,7 +280,6 @@ def migrate():
 ###############################################################################
 def setup_params():
     """Determine script operational parameters."""
-    global service_flag
     Script.fullname = os.path.splitext(os.path.abspath(__file__))[0]
     Script.basename = os.path.basename(__file__)
     Script.name = os.path.splitext(Script.basename)[0]

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for updating user ids in target codelist and agenda tables."""
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -118,7 +118,6 @@ def target_close():
 ###############################################################################
 def setup_params():
     """Determine script operational parameters."""
-    global service_flag
     Script.fullname = os.path.splitext(os.path.abspath(__file__))[0]
     Script.basename = os.path.basename(__file__)
     Script.name = os.path.splitext(Script.basename)[0]
