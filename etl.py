@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating individual code list or agenda table."""
-__version__ = '0.5.1'
+__version__ = '0.5.2'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -43,7 +43,7 @@ class Source:
 
     (
         conn, query, cursor, table, database, root, ALL,
-    ) = (None, None, None, None, None, None, '*')
+    ) = (None, None, None, None, None, None, '*',)
 
 
 class Target:

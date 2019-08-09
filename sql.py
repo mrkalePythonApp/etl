@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module with SQL DML strings for MariaDB databases."""
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -320,8 +320,7 @@ def compose_select(table, fields):
         for query parameters.
 
     """
-    query = 'SELECT {} FROM {}'.format(fields, table)
-    return query
+    return f'SELECT {fields} FROM {table}'
 
 
 def compose_insert(table, fields, values):
