@@ -21,6 +21,7 @@ import os
 import argparse
 import logging
 import mysql.connector as mysql
+import datetime
 
 # Third party modules
 import dbconfig as db
@@ -233,6 +234,7 @@ def tablelist(table_prefix):
 
     """
     format = '%d.%m.%Y %H:%M:%S'
+    format_db = '%Y-%m-%d %H:%M:%S'
     tables = [{
                 'source_table': source_table,
                 'source_datetime': None,
@@ -255,11 +257,19 @@ def tablelist(table_prefix):
         try:
             Source.cursor.execute(Source.query)
             record = Source.cursor.fetchone()
-            tables[i]['source_timestamp'] = record[0]
+            timestamp = record[0]
+            if isinstance(timestamp, str):
+                timestamp = datetime.datetime.strptime(timestamp, format_db)
+            tables[i]['source_timestamp'] = timestamp
             try:
-                tables[i]['source_datetime'] = record[0].strftime(format)
-            except AttributeError:
+                tables[i]['source_datetime'] = timestamp.strftime(format)
+            except AttributeError as err:
                 tables[i]['source_datetime'] = 'N/A'
+                errmsg = \
+                    f"{table['source_table']}" \
+                    f".modified" \
+                    f" - {err}"
+                logger.error(errmsg)
         except mysql.Error as err:
             logger.error(err)
         finally:
@@ -273,11 +283,19 @@ def tablelist(table_prefix):
         try:
             Target.cursor.execute(Target.query)
             record = Target.cursor.fetchone()
-            tables[i]['target_timestamp'] = record[0]
+            timestamp = record[0]
+            if isinstance(timestamp, str):
+                timestamp = datetime.datetime.strptime(timestamp, format_db)
+            tables[i]['target_timestamp'] = timestamp
             try:
-                tables[i]['target_datetime'] = record[0].strftime(format)
-            except AttributeError:
+                tables[i]['target_datetime'] = timestamp.strftime(format)
+            except AttributeError as err:
                 tables[i]['target_datetime'] = 'N/A'
+                errmsg = \
+                    f"{table['target_table']}" \
+                    f".modified" \
+                    f" - {err}"
+                logger.error(errmsg)
         except mysql.Error as err:
             logger.error(err)
         finally:
@@ -287,6 +305,9 @@ def tablelist(table_prefix):
 
 def main():
     """Fundamental control function."""
+    def esc(code):
+        """ANSI Escape Codes."""
+        return f'\033[{code}m'
     setup_params()
     setup_cmdline()
     setup_logger()
@@ -311,19 +332,22 @@ def main():
             print()
             print(f'{source.capitalize()}:')
             for table in tables:
-                prefix = ''
+                ansi = esc(0)
                 if table['source_timestamp'] is None \
                 or table['target_timestamp'] is None:
                     prefix = '???'
+                    ansi = esc(96)  # Cyan
                 elif table['source_timestamp'] > table['target_timestamp']:
                     prefix = '!!!'
-                elif table['source_timestamp'] == table['target_timestamp']:
-                    prefix = '='
+                    ansi = esc(31)  # Red
                 elif table['source_timestamp'] < table['target_timestamp']:
                     prefix = '<'
+                    ansi = esc(93)  # Yellow
+                elif table['source_timestamp'] == table['target_timestamp']:
+                    prefix = '='
                 else:
                     prefix = ''
-                
+
                 msg = \
                     f"{prefix.ljust(4)}" \
                     f"{table['source_table']}" \
@@ -331,7 +355,7 @@ def main():
                     f" -> " \
                     f"{table['target_table']}" \
                     f" ({table['target_datetime']})"
-                print(msg)
+                print(ansi + msg)
         source_close()
         target_close()
     else:
