@@ -7,7 +7,7 @@ Notes
 - If some source table has latest modification datetime younger than the target
   one, it is flagged.
 """
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -239,9 +239,11 @@ def tablelist(table_prefix):
                 'source_table': source_table,
                 'source_datetime': None,
                 'source_timestamp': None,
+                'source_count': None,
                 'target_table': target['table_target'],
                 'target_datetime': None,
                 'target_timestamp': None,
+                'target_count': None,
               }
               for source_table, target
               in sql.source.items()
@@ -251,7 +253,7 @@ def tablelist(table_prefix):
         # Source datetime
         Source.query = sql.compose_select(
             table['source_table'],
-            'MAX(GREATEST(modified, created)) AS modified'
+            'MAX(GREATEST(modified, created)), COUNT(*)'
         )
         Source.cursor = Source.conn.cursor()
         try:
@@ -261,6 +263,7 @@ def tablelist(table_prefix):
             if isinstance(timestamp, str):
                 timestamp = datetime.datetime.strptime(timestamp, format_db)
             tables[i]['source_timestamp'] = timestamp
+            tables[i]['source_count'] = record[1]
             try:
                 tables[i]['source_datetime'] = timestamp.strftime(format)
             except AttributeError as err:
@@ -277,7 +280,7 @@ def tablelist(table_prefix):
         # Target datetime
         Target.query = sql.compose_select(
             table['target_table'],
-            'MAX(GREATEST(modified, created)) AS modified'
+            'MAX(GREATEST(modified, created)), COUNT(*)'
         )
         Target.cursor = Target.conn.cursor()
         try:
@@ -287,6 +290,7 @@ def tablelist(table_prefix):
             if isinstance(timestamp, str):
                 timestamp = datetime.datetime.strptime(timestamp, format_db)
             tables[i]['target_timestamp'] = timestamp
+            tables[i]['target_count'] = record[1]
             try:
                 tables[i]['target_datetime'] = timestamp.strftime(format)
             except AttributeError as err:
@@ -347,14 +351,16 @@ def main():
                     prefix = '='
                 else:
                     prefix = ''
-
                 msg = \
                     f"{prefix.ljust(4)}" \
-                    f"{table['source_table']}" \
-                    f" ({table['source_datetime']})" \
-                    f" -> " \
-                    f"{table['target_table']}" \
-                    f" ({table['target_datetime']})"
+                    f"{table['source_table']} (" \
+                    f"{table['source_datetime']}" \
+                    f", {table['source_count']}" \
+                    f") -> " \
+                    f"{table['target_table']} (" \
+                    f"{table['target_datetime']}" \
+                    f", {table['target_count']}" \
+                    f")"
                 print(ansi + msg)
         source_close()
         target_close()
