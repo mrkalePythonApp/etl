@@ -7,7 +7,7 @@ Notes
 - If some source table has latest modification datetime younger than the target
   one, it is flagged.
 """
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -272,7 +272,7 @@ def tablelist(table_prefix):
                     f"{table['source_table']}" \
                     f".modified" \
                     f" - {err}"
-                logger.error(errmsg)
+                # logger.error(errmsg)
         except mysql.Error as err:
             logger.error(err)
         finally:
@@ -299,7 +299,7 @@ def tablelist(table_prefix):
                     f"{table['target_table']}" \
                     f".modified" \
                     f" - {err}"
-                logger.error(errmsg)
+                # logger.error(errmsg)
         except mysql.Error as err:
             logger.error(err)
         finally:
@@ -362,6 +362,7 @@ def main():
                     f", {table['target_count']}" \
                     f")"
                 print(ansi + msg)
+        print(esc(0))
         source_close()
         target_close()
     else:
