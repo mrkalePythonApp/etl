@@ -268,10 +268,10 @@ def tablelist(table_prefix):
                 tables[i]['source_datetime'] = timestamp.strftime(format)
             except AttributeError as err:
                 tables[i]['source_datetime'] = 'N/A'
-                errmsg = \
-                    f"{table['source_table']}" \
-                    f".modified" \
-                    f" - {err}"
+                # errmsg = \
+                #     f"{table['source_table']}" \
+                #     f".modified" \
+                #     f" - {err}"
                 # logger.error(errmsg)
         except mysql.Error as err:
             logger.error(err)
@@ -295,10 +295,10 @@ def tablelist(table_prefix):
                 tables[i]['target_datetime'] = timestamp.strftime(format)
             except AttributeError as err:
                 tables[i]['target_datetime'] = 'N/A'
-                errmsg = \
-                    f"{table['target_table']}" \
-                    f".modified" \
-                    f" - {err}"
+                # errmsg = \
+                #     f"{table['target_table']}" \
+                #     f".modified" \
+                #     f" - {err}"
                 # logger.error(errmsg)
         except mysql.Error as err:
             logger.error(err)
