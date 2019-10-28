@@ -1,5 +1,7 @@
-# Sensitive files
+# Sensitive and document files
 dbconfig*.py
+*.xlsx
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
