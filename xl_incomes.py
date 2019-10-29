@@ -15,6 +15,8 @@ import argparse
 import logging
 import mysql.connector as mysql
 import openpyxl
+import datetime
+import dataclasses
 
 # Custom library modules
 import dbconfig as db
@@ -43,8 +45,8 @@ class Source:
     """Status parameters of the data source."""
 
     (
-        file, juser, wbook,
-    ) = ('Mimoriadne príjmy.xlsx', 820, None,)
+        file, juser, wbook, wsheet,
+    ) = ('Mimoriadne príjmy.xlsx', 820, None, None,)
 
 
 class Target:
@@ -53,6 +55,129 @@ class Target:
     (
         conn, query, cursor, table, database, root, register,
     ) = (None, None, None, None, None, None, None,)
+
+
+@dataclasses.dataclass
+class Column:
+    """MS Excel column definition of an agenda."""
+    title: str
+    datatype: str
+    dbfield: str
+    index: int = None
+    optional: bool = False
+    value: any = None
+    comment: str = None
+
+    def reset(self):
+        self.valid = False
+
+
+class Agenda(object):
+    """MS Excel agenda column set."""
+
+    def __init__(self):
+        self._columns: [Column] = []
+
+    @property
+    def coldefs(self):
+        return self._columns
+    
+    @property
+    def comments(self):
+        l = [c.comment.content for c in self.coldefs if c.comment]
+        return '\n'.join(l)
+
+    def set_column_index(self, title, colnum):
+        """Find column and set it column index."""
+        result = None
+        title = title.replace('\n', ' ')
+        for cn, col in enumerate(self.coldefs):
+            if col.title == title:
+                col.index = colnum
+                result = cn
+                break
+        return result
+
+    def check_agenda(self) -> bool:
+        """Check presence of all mandatory columns
+        and at least one optional one.
+        
+        """
+        flag_mandatory_fields = True
+        flag_optional_fields = False
+        for col in self.coldefs:
+            if not col.optional and col.index is None:
+                flag_mandatory_fields = False
+            if col.optional and col.index is not None:
+                flag_optional_fields = True
+        return flag_mandatory_fields and flag_optional_fields
+
+    def get_column_by_dbfield(self, dbfield):
+        """Find column object by database field in the target db."""
+        for col in self.coldefs:
+            if col.dbfield == dbfield:
+                return col
+
+    def get_column_by_index(self, index):
+        """Find column object by column index in MS Excel."""
+        for col in self.coldefs:
+            if col.index == index:
+                return col
+    def get_columns(self):
+        """Calculate number of active columns in MS Excel sheet."""
+        cols = 0
+        for col in self.coldefs:
+            if col.index:
+                cols += 1
+        return cols
+
+    def store_cell(self, cell, colnum):
+        coldef = self.get_column_by_index(colnum)
+        coldef.value = None
+        coldef.comment = None
+        if not cell.value:
+            return
+        if cell.data_type == coldef.datatype:
+            coldef.value = cell.value
+            coldef.comment = cell.comment
+            return coldef
+        else:
+            logger.warning(
+                'Ignored cell "%s!%s%s" ' \
+                'with unexpected data type "%s" ' \
+                'for column "%s"',
+                Source.wsheet.title,
+                cell.column_letter,
+                cell.row,
+                cell.data_type,
+                coldef.title
+            )
+
+
+###############################################################################
+# Agenda definitions
+###############################################################################
+class Income(Agenda):
+    """MS Excel agenda column set."""
+
+    def __init__(self):
+        self._columns = [
+            Column('Dátum', 'd', 'date_on'),
+            Column('Príjem', 's', 'title'),
+            Column('Suma €', 'n', 'price', optional=True),
+            Column('Suma Sk', 'n', 'price_orig', optional=True),
+        ]
+    
+    def store_cell(self, cell, colnum):
+        coldef = super().store_cell(cell, colnum)
+        if coldef and coldef.value and coldef.dbfield == 'price_orig':
+            pricedef = self.get_column_by_dbfield('price')
+            pricedef.value = coldef.value / 30.126
+        return coldef
+
+    def check_row(self):
+        coldef = self.get_column_by_dbfield('date_on')
+        return coldef.value and coldef.datatype == 'd'
 
 
 ###############################################################################
@@ -76,6 +201,39 @@ def source_open():
         )
         return False
     return True
+
+
+def detect_agenda():
+    """Determine the target agenda from the first row of a worksheet.
+
+    Returns
+    -------
+    boolean
+        Flag about successful processing.
+
+    """
+    income = Income()
+    # Header row
+    for cn, cell in enumerate(list(Source.wsheet)[0]):
+        income.set_column_index(cell.value, cn)
+    if not income.check_agenda():
+        msg = 'Uknown agenda structure'
+        logger.error(msg)
+        return False
+    # Data rows
+    for row in Source.wsheet.iter_rows(
+        min_row=2,
+        max_col=income.get_columns() + 1):
+        # Process columns of a row
+        for cn, cell in enumerate(row):
+            income.store_cell(cell, cn)
+        # Ignore row with empty date column
+        if not income.check_row():
+            continue
+        # Migrate row
+        for cn, coldef in enumerate(income.coldefs):
+            msg = f'{cn}. {coldef.value}'
+            logger.debug(msg)
 
 
 ###############################################################################
@@ -215,6 +373,14 @@ def main():
     # Connect to MS Excel
     if not source_open():
         return
+    # Process sheets
+    # for Source.wsheet in list(Source.wbook):
+    Source.wsheet = Source.wbook['2006']
+    detect_agenda()
+    Source.wsheet = Source.wbook['2003']
+    detect_agenda()
+        # break
+
     # Connect to target database
     # Target.database = db.target_config['database']
     # if not target_open():
