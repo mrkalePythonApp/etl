@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Script for migrating incomes from MS Excel to Family Chronicle."""
+"""Script for migrating agendas from MS Excel to Family Chronicle."""
 __version__ = '0.1.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
@@ -17,6 +17,7 @@ import mysql.connector as mysql
 import openpyxl
 import datetime
 import dataclasses
+import abc
 
 # Custom library modules
 import dbconfig as db
@@ -41,12 +42,19 @@ class Script:
     ) = ('', '', '',)
 
 
+class Params:
+    """Global business parameters."""
+
+    (
+        juser, jskccy
+    ) = (820, 1)
+
 class Source:
     """Status parameters of the data source."""
 
     (
-        file, juser, wbook, wsheet,
-    ) = ('Mimoriadne príjmy.xlsx', 820, None, None,)
+        file, wbook, wsheet, agenda,
+    ) = (None, None, None, None)
 
 
 class Target:
@@ -67,25 +75,72 @@ class Column:
     optional: bool = False
     value: any = None
     comment: str = None
+    rounding: int = None
 
     def reset(self):
-        self.valid = False
+        self.index = None
+        self.value = None
+        self.comment = None
 
 
-class Agenda(object):
+class Agenda(abc.ABC):
     """MS Excel agenda column set."""
 
     def __init__(self):
         self._columns: [Column] = []
 
     @property
+    def dbfields(self):
+        now = datetime.datetime.now()
+        return {
+            'params': '',
+            'metakey': '',
+            'metadesc': '',
+            'metadata': '',
+            'created': now,
+            'created_by': Params.juser,
+            'modified': now,
+            'modified_by': Params.juser,
+            'description': self.comments,
+        }
+
+    @property
+    def ins_fields(self):
+        return ','.join(self.dbfields.keys())
+
+    @property
+    def ins_values(self):
+        return ','.join([f'%({k})s' for k in self.dbfields.keys()])
+
+    @property
+    def header_row(self):
+        return self._row_header
+
+    @header_row.setter
+    def header_row(self, colnum):
+        self._row_header = colnum
+
+    @property
     def coldefs(self):
         return self._columns
-    
+
+    @property
+    def columns(self):
+        """Calculate number of active columns in MS Excel sheet."""
+        cols = 0
+        for col in self.coldefs:
+            if col.index is not None:
+                cols += 1
+        return cols
+
     @property
     def comments(self):
         l = [c.comment.content for c in self.coldefs if c.comment]
         return '\n'.join(l)
+
+    def reset(self):
+        for col in self.coldefs:
+            col.reset()
 
     def set_column_index(self, title, colnum):
         """Find column and set it column index."""
@@ -97,6 +152,12 @@ class Agenda(object):
                 result = cn
                 break
         return result
+
+    def check_row(self) -> bool:
+        for col in self.coldefs:
+            if not (col.optional or col.value):
+                return False
+        return True
 
     def check_agenda(self) -> bool:
         """Check presence of all mandatory columns
@@ -123,13 +184,6 @@ class Agenda(object):
         for col in self.coldefs:
             if col.index == index:
                 return col
-    def get_columns(self):
-        """Calculate number of active columns in MS Excel sheet."""
-        cols = 0
-        for col in self.coldefs:
-            if col.index:
-                cols += 1
-        return cols
 
     def store_cell(self, cell, colnum):
         coldef = self.get_column_by_index(colnum)
@@ -140,9 +194,9 @@ class Agenda(object):
         if cell.data_type == coldef.datatype:
             coldef.value = cell.value
             coldef.comment = cell.comment
-            return coldef
+            return self.round_column(coldef)
         else:
-            logger.warning(
+            logger.error(
                 'Ignored cell "%s!%s%s" ' \
                 'with unexpected data type "%s" ' \
                 'for column "%s"',
@@ -152,6 +206,11 @@ class Agenda(object):
                 cell.data_type,
                 coldef.title
             )
+        
+    def round_column(self, coldef):
+        if coldef.rounding and coldef.datatype in ['n', 'f']:
+            coldef.value = round(coldef.value, coldef.rounding)
+        return coldef
 
 
 ###############################################################################
@@ -164,20 +223,30 @@ class Income(Agenda):
         self._columns = [
             Column('Dátum', 'd', 'date_on'),
             Column('Príjem', 's', 'title'),
-            Column('Suma €', 'n', 'price', optional=True),
-            Column('Suma Sk', 'n', 'price_orig', optional=True),
+            Column('Suma €', 'n', 'price', optional=True, rounding=2),
+            Column('Suma Sk', 'n', 'price_orig', optional=True, rounding=2),
+            Column('Currency', 'n', 'id_currency', optional=True),
         ]
-    
+
+    @property
+    def dbfields(self):
+        fields = {col.dbfield: col.value for col in self.coldefs if col.value}
+        # for col in self.coldefs:
+        #     if col.value:
+        #         fields[col.dbfield] = col.value
+        fields.update(super().dbfields)
+        return fields
+
     def store_cell(self, cell, colnum):
         coldef = super().store_cell(cell, colnum)
-        if coldef and coldef.value and coldef.dbfield == 'price_orig':
-            pricedef = self.get_column_by_dbfield('price')
-            pricedef.value = coldef.value / 30.126
+        if coldef and coldef.value:
+            if coldef.dbfield == 'price_orig':
+                pricedef = self.get_column_by_dbfield('price')
+                pricedef.value = coldef.value / 30.126
+                self.round_column(pricedef)
+                ccydef = self.get_column_by_dbfield('id_currency')
+                ccydef.value = Params.jskccy
         return coldef
-
-    def check_row(self):
-        coldef = self.get_column_by_dbfield('date_on')
-        return coldef.value and coldef.datatype == 'd'
 
 
 ###############################################################################
@@ -203,8 +272,8 @@ def source_open():
     return True
 
 
-def detect_agenda():
-    """Determine the target agenda from the first row of a worksheet.
+def migrate_sheet():
+    """Migrate worksheet to target agenda.
 
     Returns
     -------
@@ -212,28 +281,56 @@ def detect_agenda():
         Flag about successful processing.
 
     """
-    income = Income()
-    # Header row
-    for cn, cell in enumerate(list(Source.wsheet)[0]):
-        income.set_column_index(cell.value, cn)
-    if not income.check_agenda():
-        msg = 'Uknown agenda structure'
+    a = Source.agenda
+    a.reset()
+    # Header row - First one with non-empty first column
+    for row in Source.wsheet.iter_rows(min_row=1):
+        cell = row[0]
+        if cell.value:
+            a.header_row = cell.row
+            for cn, cell in enumerate(row):
+                a.set_column_index(cell.value, cn)
+            if not a.check_agenda():
+                msg = 'Uknown agenda structure'
+                logger.error(msg)
+                return False
+            break
+    if not a.header_row:
+        msg = 'No header row detected.'
         logger.error(msg)
         return False
     # Data rows
+    rows = 0
     for row in Source.wsheet.iter_rows(
-        min_row=2,
-        max_col=income.get_columns() + 1):
+        min_row=a.header_row + 1,
+        max_col=a.columns
+    ):
         # Process columns of a row
         for cn, cell in enumerate(row):
-            income.store_cell(cell, cn)
+            a.store_cell(cell, cn)
         # Ignore row with empty date column
-        if not income.check_row():
+        if not a.check_row():
             continue
-        # Migrate row
-        for cn, coldef in enumerate(income.coldefs):
-            msg = f'{cn}. {coldef.value}'
-            logger.debug(msg)
+        # Insert row to target table
+        Target.query = sql.compose_insert(
+            table=Target.table,
+            fields=a.ins_fields,
+            values=a.ins_values,
+            )
+        Target.cursor = Target.conn.cursor()
+        try:
+            Target.cursor.execute(Target.query, a.dbfields)
+            rows += 1
+        except mysql.Error as err:
+            logger.error(err)
+            # return False
+    logger.info(
+        'Migrated %d rows from sheet "%s" to table "%s.%s"',
+        rows,
+        Source.wsheet.title,
+        Target.database,
+        Target.table
+    )
 
 
 ###############################################################################
@@ -260,13 +357,13 @@ def connect_db(config):
     """
     try:
         conn = mysql.connect(**config)
-        logger.debug('Database %s connected', config['database'])
+        logger.debug('Database "%s" connected', config['database'])
         return conn
     except mysql.Error as err:
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
-            logger.error('Bad database %s credentials', config['database'])
+            logger.error('Bad database "%s" credentials', config['database'])
         elif err.errno == mysql.errorcode.ER_BAD_DB_ERROR:
-            logger.error('Database %s does not exist', config['database'])
+            logger.error('Database "%s" does not exist', config['database'])
         else:
             logger.error(err)
         raise
@@ -281,15 +378,30 @@ def target_open():
         Flag about successful processing.
 
     """
+    # Connect to database
+    Target.database = db.target_config['database']
     if Target.conn is None:
         try:
             Target.conn = connect_db(db.target_config)
         except Exception:
             logger.error(
-                'Cannot connect to the target database %s',
+                'Cannot connect to the target database "%s"',
                 Target.database
                 )
             return False
+    # Truncate target table
+    Target.query = sql.compose_truncate(Target.table)
+    Target.cursor = Target.conn.cursor()
+    try:
+        Target.cursor.execute(Target.query)
+        logger.debug(
+            'Table "%s.%s" truncated',
+            Target.database,
+            Target.table
+        )
+    except mysql.Error as err:
+        logger.error(err)
+        return False
     return True
 
 
@@ -320,15 +432,18 @@ def setup_params():
 def setup_cmdline():
     """Define command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Migration the agenda "incomes" from MS Excel, version '
+        description='Migration of an agenda from provided MS Excel, version '
         + __version__
     )
     # Position arguments
     parser.add_argument(
+        'agenda',
+        choices=['incomes'],
+        help='Migrated agenda.'
+    )
+    parser.add_argument(
         'workbook',
-        nargs='?',
-        default=Source.file,
-        help='MS Excel workbook file, default: ' + Source.file
+        help='MS Excel workbook file.'
     )
     # Options
     parser.add_argument(
@@ -346,8 +461,8 @@ def setup_cmdline():
     parser.add_argument(
         '-u', '--user',
         type=int,
-        default=Source.juser,
-        help='Joomla! user id for migration, default: ' + str(Source.juser)
+        default=Params.juser,
+        help='Joomla! user id for migration, default: ' + str(Params.juser)
     )
     # Process command line arguments
     global cmdline
@@ -373,18 +488,16 @@ def main():
     # Connect to MS Excel
     if not source_open():
         return
-    # Process sheets
-    # for Source.wsheet in list(Source.wbook):
-    Source.wsheet = Source.wbook['2006']
-    detect_agenda()
-    Source.wsheet = Source.wbook['2003']
-    detect_agenda()
-        # break
-
+    if cmdline.agenda == 'incomes':
+        Source.agenda = Income()
+        Target.table = sql.compose_table(
+            sql.target_table_prefix_agenda,
+            cmdline.agenda)
     # Connect to target database
-    # Target.database = db.target_config['database']
-    # if not target_open():
-    #     return
+    if target_open():
+        # Process sheets
+        for Source.wsheet in list(Source.wbook):
+            migrate_sheet()
     # Close databases
     target_close()
     logger.info('Migration finished')
