@@ -46,11 +46,11 @@ class Params:
     """Global business parameters."""
 
     (
-        juser, jskccy
-    ) = (820, 1)
+        juser, jskccy, skeu, rows,
+    ) = (820, 1, 30.126, 0)
 
 class Source:
-    """Status parameters of the data source."""
+    """Parameters of the data source."""
 
     (
         file, wbook, wsheet, agenda,
@@ -58,11 +58,11 @@ class Source:
 
 
 class Target:
-    """Status parameters of the data target."""
+    """Parameters of the data target."""
 
     (
-        conn, query, cursor, table, database, root, register,
-    ) = (None, None, None, None, None, None, None,)
+        host, conn, query, cursor, table, database, root, register,
+    ) = (None, None, None, None, None, None, None, None,)
 
 
 @dataclasses.dataclass
@@ -162,7 +162,7 @@ class Agenda(abc.ABC):
     def check_agenda(self) -> bool:
         """Check presence of all mandatory columns
         and at least one optional one.
-        
+
         """
         flag_mandatory_fields = True
         flag_optional_fields = False
@@ -206,7 +206,7 @@ class Agenda(abc.ABC):
                 cell.data_type,
                 coldef.title
             )
-        
+
     def round_column(self, coldef):
         if coldef.rounding and coldef.datatype in ['n', 'f']:
             coldef.value = round(coldef.value, coldef.rounding)
@@ -242,7 +242,7 @@ class Income(Agenda):
         if coldef and coldef.value:
             if coldef.dbfield == 'price_orig':
                 pricedef = self.get_column_by_dbfield('price')
-                pricedef.value = coldef.value / 30.126
+                pricedef.value = coldef.value / Params.skeu
                 self.round_column(pricedef)
                 ccydef = self.get_column_by_dbfield('id_currency')
                 ccydef.value = Params.jskccy
@@ -323,13 +323,11 @@ def migrate_sheet():
             rows += 1
         except mysql.Error as err:
             logger.error(err)
-            # return False
+    Params.rows += rows
     logger.info(
-        'Migrated %d rows from sheet "%s" to table "%s.%s"',
+        '%d rows from sheet "%s"',
         rows,
         Source.wsheet.title,
-        Target.database,
-        Target.table
     )
 
 
@@ -357,7 +355,11 @@ def connect_db(config):
     """
     try:
         conn = mysql.connect(**config)
-        logger.debug('Database "%s" connected', config['database'])
+        logger.debug(
+            'Database "%s//%s" connected',
+            config['host'],
+            config['database'],
+            )
         return conn
     except mysql.Error as err:
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
@@ -379,6 +381,7 @@ def target_open():
 
     """
     # Connect to database
+    Target.host = db.target_config['host']
     Target.database = db.target_config['database']
     if Target.conn is None:
         try:
@@ -386,7 +389,7 @@ def target_open():
         except Exception:
             logger.error(
                 'Cannot connect to the target database "%s"',
-                Target.database
+                Target.database,
                 )
             return False
     # Truncate target table
@@ -395,9 +398,8 @@ def target_open():
     try:
         Target.cursor.execute(Target.query)
         logger.debug(
-            'Table "%s.%s" truncated',
-            Target.database,
-            Target.table
+            'Table "%s" truncated',
+            Target.table,
         )
     except mysql.Error as err:
         logger.error(err)
@@ -484,7 +486,6 @@ def main():
     setup_params()
     setup_cmdline()
     setup_logger()
-    logger.info('Migration started')
     # Connect to MS Excel
     if not source_open():
         return
@@ -493,14 +494,22 @@ def main():
         Target.table = sql.compose_table(
             sql.target_table_prefix_agenda,
             cmdline.agenda)
-    # Connect to target database
+    # Migrate sheets
     if target_open():
-        # Process sheets
+        logger.info(
+            'START -- Migration to database table "%s//%s.%s"',
+            Target.host,
+            Target.database,
+            Target.table,
+            )
         for Source.wsheet in list(Source.wbook):
             migrate_sheet()
+        logger.info(
+            'STOP -- Migrated %d rows in total',
+            Params.rows,
+            )
     # Close databases
     target_close()
-    logger.info('Migration finished')
 
 
 if __name__ == '__main__':
