@@ -17,7 +17,6 @@ import mysql.connector as mysql
 import openpyxl
 import datetime
 import dataclasses
-import abc
 
 # Custom library modules
 import dbconfig as db
@@ -78,19 +77,22 @@ class Column:
     rounding: int = None
 
     def reset(self):
+        """Initialize dynamic fields of a data record."""
         self.index = None
         self.value = None
         self.comment = None
 
 
-class Agenda(abc.ABC):
-    """MS Excel agenda column set."""
+class Agenda(object):
+    """MS Excel workbook of an agenda processing."""
 
     def __init__(self):
+        """Create the class instance - constructor."""
         self._columns: [Column] = []
 
     @property
-    def dbfields(self):
+    def dbfields(self) -> dict:
+        """Common table fields for all target database tables."""
         now = datetime.datetime.now()
         return {
             'params': '',
@@ -105,28 +107,33 @@ class Agenda(abc.ABC):
         }
 
     @property
-    def ins_fields(self):
+    def ins_fields(self) -> str:
+        """Comma separated list of table fields for insert SQL query."""
         return ','.join(self.dbfields.keys())
 
     @property
-    def ins_values(self):
+    def ins_values(self) -> str:
+        """Comma separated list of values placeholders for insert SQL."""
         return ','.join([f'%({k})s' for k in self.dbfields.keys()])
 
     @property
-    def header_row(self):
+    def header_row(self) -> int:
+        """Number of a header row in a workbook."""
         return self._row_header
 
     @header_row.setter
-    def header_row(self, colnum):
+    def header_row(self, colnum: int):
+        """Storing number of a header row in a workbook."""
         self._row_header = colnum
 
     @property
-    def coldefs(self):
+    def coldefs(self) -> int:
+        """Number of used columns in a workbook."""
         return self._columns
 
     @property
-    def columns(self):
-        """Calculate number of active columns in MS Excel sheet."""
+    def columns(self) -> int:
+        """Calculate number of used columns in a workbook."""
         cols = 0
         for col in self.coldefs:
             if col.index is not None:
@@ -134,34 +141,54 @@ class Agenda(abc.ABC):
         return cols
 
     @property
-    def comments(self):
+    def comments(self) -> str:
+        """Cummulative comment from all workbook cells."""
         l = [c.comment.content for c in self.coldefs if c.comment]
         return '\n'.join(l)
 
     def reset(self):
+        """Reset all dynamic properties of all data fields of an agenda."""
         for col in self.coldefs:
             col.reset()
 
-    def set_column_index(self, title, colnum):
-        """Find column and set it column index."""
-        result = None
+    def set_column_index(self, title: str, colnum: int) -> int:
+        """Set index of a workbook column in an agenda record.
+
+        Arguments
+        ---------
+        title : string
+            Column header taken usually from the first workbook row.
+        colnum : int
+            Sequence number of a workbook column counting from 1.
+
+        Returns
+        -------
+        int
+            Index of a column determined by the input title in an agenda's
+            data record counting from 0 or None, if column is not found.
+
+        Notes
+        -----
+        - The method sanitizes the input title by substituting all new line
+          characters with space.
+
+        """
         title = title.replace('\n', ' ')
         for cn, col in enumerate(self.coldefs):
             if col.title == title:
                 col.index = colnum
-                result = cn
-                break
-        return result
+                return cn
 
     def check_row(self) -> bool:
+        """Test for all mandatory data fields on determined value."""
         for col in self.coldefs:
-            if not (col.optional or col.value):
+            if not (col.optional or col.value is not None):
                 return False
         return True
 
     def check_agenda(self) -> bool:
-        """Check presence of all mandatory columns
-        and at least one optional one.
+        """Check presence of all mandatory data fields
+        and at least one optional one in a data record.
 
         """
         flag_mandatory_fields = True
@@ -173,19 +200,23 @@ class Agenda(abc.ABC):
                 flag_optional_fields = True
         return flag_mandatory_fields and flag_optional_fields
 
-    def get_column_by_dbfield(self, dbfield):
-        """Find column object by database field in the target db."""
+    def get_column_by_dbfield(self, dbfield: str) -> Column:
+        """Find column object by database field name in the data record."""
         for col in self.coldefs:
             if col.dbfield == dbfield:
                 return col
 
-    def get_column_by_index(self, index):
-        """Find column object by column index in MS Excel."""
+    def get_column_by_index(self, index: int) -> Column:
+        """Find column object by column index in a workbook."""
         for col in self.coldefs:
             if col.index == index:
                 return col
 
-    def store_cell(self, cell, colnum):
+    def store_cell(self, cell: object, colnum: int) -> Column:
+        """Store value and comment from a workbook cell in a column
+        and return that column object for chaining.
+
+        """
         coldef = self.get_column_by_index(colnum)
         coldef.value = None
         coldef.comment = None
@@ -207,7 +238,11 @@ class Agenda(abc.ABC):
                 coldef.title
             )
 
-    def round_column(self, coldef):
+    def round_column(self, coldef: Column) -> Column:
+        """Round a data field value in a column definition, if it is of some
+        numeric type and rounding is declared in the column definition.
+
+        """
         if coldef.rounding and coldef.datatype in ['n', 'f']:
             coldef.value = round(coldef.value, coldef.rounding)
         return coldef
@@ -220,6 +255,8 @@ class Income(Agenda):
     """MS Excel agenda column set."""
 
     def __init__(self):
+        """Definition of agenda workbook columns and their relation to target
+        database table columns."""
         self._columns = [
             Column('Dátum', 'd', 'date_on'),
             Column('Príjem', 's', 'title'),
@@ -229,15 +266,14 @@ class Income(Agenda):
         ]
 
     @property
-    def dbfields(self):
+    def dbfields(self) -> dict:
+        """Adding specific table fields for the agenda to common ones."""
         fields = {col.dbfield: col.value for col in self.coldefs if col.value}
-        # for col in self.coldefs:
-        #     if col.value:
-        #         fields[col.dbfield] = col.value
         fields.update(super().dbfields)
         return fields
 
-    def store_cell(self, cell, colnum):
+    def store_cell(self, cell: object, colnum: int) -> Column:
+        """Additional specific actions at storing a workbook cell."""
         coldef = super().store_cell(cell, colnum)
         if coldef and coldef.value:
             if coldef.dbfield == 'price_orig':
@@ -252,7 +288,7 @@ class Income(Agenda):
 ###############################################################################
 # MS Excel actions
 ###############################################################################
-def source_open():
+def source_open() -> bool:
     """Open a source MS Excel spreadsheet file.
 
     Returns
@@ -272,8 +308,8 @@ def source_open():
     return True
 
 
-def migrate_sheet():
-    """Migrate worksheet to target agenda.
+def migrate_sheet() -> bool:
+    """Migrate workbook to the target agenda.
 
     Returns
     -------
@@ -334,7 +370,7 @@ def migrate_sheet():
 ###############################################################################
 # Database actions
 ###############################################################################
-def connect_db(config):
+def connect_db(config: dict) -> object:
     """Connect to a database.
 
     Arguments
@@ -371,7 +407,7 @@ def connect_db(config):
         raise
 
 
-def target_open():
+def target_open() -> bool:
     """Connect to a target database.
 
     Returns
@@ -486,15 +522,16 @@ def main():
     setup_params()
     setup_cmdline()
     setup_logger()
-    # Connect to MS Excel
+    # Connect to MS Excel workbook
     if not source_open():
         return
     if cmdline.agenda == 'incomes':
         Source.agenda = Income()
-        Target.table = sql.compose_table(
-            sql.target_table_prefix_agenda,
-            cmdline.agenda)
-    # Migrate sheets
+    # Store agenda parameters
+    Target.table = sql.compose_table(
+        sql.target_table_prefix_agenda,
+        cmdline.agenda)
+    # Migrate sheets of a workbook
     if target_open():
         logger.info(
             'START -- Migration to database table "%s//%s.%s"',
