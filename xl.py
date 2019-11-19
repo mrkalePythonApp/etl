@@ -231,9 +231,6 @@ class Income(Agenda):
     @property
     def dbfields(self):
         fields = {col.dbfield: col.value for col in self.coldefs if col.value}
-        # for col in self.coldefs:
-        #     if col.value:
-        #         fields[col.dbfield] = col.value
         fields.update(super().dbfields)
         return fields
 
