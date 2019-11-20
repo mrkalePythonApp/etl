@@ -17,7 +17,7 @@ import mysql.connector as mysql
 import openpyxl
 import datetime
 import dataclasses
-import abc
+from abc import ABC, abstractmethod
 
 # Custom library modules
 import dbconfig as db
@@ -67,15 +67,21 @@ class Target:
 
 @dataclasses.dataclass
 class Column:
-    """MS Excel column definition of an agenda."""
+    """MS Excel column definition of an agenda.
+
+    - 'desc' determines that the column value is appended to the 'description'
+       as comment and 'dbfield' is ignored.
+    
+    """
     title: str
-    datatype: str
-    dbfield: str
+    datatype: str = 's'
+    dbfield: str = ''
     index: int = None
     optional: bool = False
     value: any = None
     comment: str = None
     rounding: int = None
+    desc: bool = False
 
     def reset(self):
         self.index = None
@@ -83,16 +89,21 @@ class Column:
         self.comment = None
 
 
-class Agenda(abc.ABC):
+class Agenda(ABC):
     """MS Excel agenda column set."""
 
     def __init__(self):
         self._columns: [Column] = []
 
     @property
+    @abstractmethod
+    def agenda(self):
+        ...
+
+    @property
     def dbfields(self):
         now = datetime.datetime.now()
-        return {
+        common_fields = {
             'params': '',
             'metakey': '',
             'metadesc': '',
@@ -103,6 +114,12 @@ class Agenda(abc.ABC):
             'modified_by': Params.juser,
             'description': self.comments,
         }
+        fields = {col.dbfield: col.value \
+            for col in self.coldefs \
+            if col.value and not col.desc
+            }
+        fields.update(common_fields)
+        return fields
 
     @property
     def ins_fields(self):
@@ -189,6 +206,14 @@ class Agenda(abc.ABC):
         coldef = self.get_column_by_index(colnum)
         coldef.value = None
         coldef.comment = None
+        if coldef.desc:
+            coldef.comment = cell.comment
+            if cell.value:
+                coldef.comment.content = f'{coldef.title}: {cell.value}'
+                coldef.comment.content += ' ' + coldef.comment.content
+                print('A.', coldef.comment.content)
+            return
+        print(coldef.title, cell.value)
         if not cell.value:
             return
         if cell.data_type == coldef.datatype:
@@ -214,10 +239,10 @@ class Agenda(abc.ABC):
 
 
 ###############################################################################
-# Agenda definitions
+# Sources definitions
 ###############################################################################
-class Income(Agenda):
-    """MS Excel agenda column set."""
+class Mimoriadne_prijmy(Agenda):
+    """MS Excel workbook 'Mimoriadne príjmy.xlsx' column set."""
 
     def __init__(self):
         self._columns = [
@@ -229,10 +254,40 @@ class Income(Agenda):
         ]
 
     @property
-    def dbfields(self):
-        fields = {col.dbfield: col.value for col in self.coldefs if col.value}
-        fields.update(super().dbfields)
-        return fields
+    def agenda(self):
+        return 'incomes'
+
+    def store_cell(self, cell, colnum):
+        coldef = super().store_cell(cell, colnum)
+        if coldef and coldef.value:
+            if coldef.dbfield == 'price_orig':
+                pricedef = self.get_column_by_dbfield('price')
+                pricedef.value = coldef.value / 30.126
+                self.round_column(pricedef)
+                ccydef = self.get_column_by_dbfield('id_currency')
+                ccydef.value = Params.jskccy
+        return coldef
+
+
+class Konopa_income(Agenda):
+    """MS Excel workbook 'Konopa_income.xlsx' column set."""
+
+    def __init__(self):
+        self._columns = [
+            Column('Dátum', 'd', 'date_on'),
+            Column('Akcia', 's', 'title'),
+            Column('Miesto', desc=True),
+            Column('Čas', desc=True),
+            Column('Hráčov', 'n', desc=True),
+            Column('Môj honorár €', 'n', 'price', optional=True, rounding=2),
+            Column('Môj honorár Sk', 'n', 'price_orig', optional=True, rounding=2),
+            Column('Poznámka', desc=True),
+            Column('Currency', 'n', 'id_currency', optional=True),
+        ]
+
+    @property
+    def agenda(self):
+        return 'incomes'
 
     def store_cell(self, cell, colnum):
         coldef = super().store_cell(cell, colnum)
@@ -314,6 +369,7 @@ def migrate_sheet():
             fields=a.ins_fields,
             values=a.ins_values,
             )
+        print(Target.query)
         Target.cursor = Target.conn.cursor()
         try:
             Target.cursor.execute(Target.query, a.dbfields)
@@ -322,11 +378,9 @@ def migrate_sheet():
             logger.error(err)
             # return False
     logger.info(
-        'Migrated %d rows from sheet "%s" to table "%s.%s"',
+        'Migrated %d rows from sheet "%s"',
         rows,
         Source.wsheet.title,
-        Target.database,
-        Target.table
     )
 
 
@@ -354,7 +408,7 @@ def connect_db(config):
     """
     try:
         conn = mysql.connect(**config)
-        logger.debug('Database "%s" connected', config['database'])
+        logger.info('Database "%s" connected', config['database'])
         return conn
     except mysql.Error as err:
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
@@ -391,7 +445,7 @@ def target_open():
     Target.cursor = Target.conn.cursor()
     try:
         Target.cursor.execute(Target.query)
-        logger.debug(
+        logger.info(
             'Table "%s.%s" truncated',
             Target.database,
             Target.table
@@ -434,12 +488,11 @@ def setup_cmdline():
     )
     # Position arguments
     parser.add_argument(
-        'agenda',
-        choices=['incomes'],
-        help='Migrated agenda.'
-    )
-    parser.add_argument(
         'workbook',
+        choices=[
+            'Mimoriadne príjmy.xlsx',
+            'Konopa_income.xlsx',
+            ],
         help='MS Excel workbook file.'
     )
     # Options
@@ -485,11 +538,16 @@ def main():
     # Connect to MS Excel
     if not source_open():
         return
-    if cmdline.agenda == 'incomes':
-        Source.agenda = Income()
+    if cmdline.workbook == 'Mimoriadne príjmy.xlsx':
+        Source.agenda = Mimoriadne_prijmy()
         Target.table = sql.compose_table(
             sql.target_table_prefix_agenda,
-            cmdline.agenda)
+            Source.agenda.agenda)
+    if cmdline.workbook == 'Konopa_income.xlsx':
+        Source.agenda = Konopa_income()
+        Target.table = sql.compose_table(
+            sql.target_table_prefix_agenda,
+            Source.agenda.agenda)
     # Connect to target database
     if target_open():
         # Process sheets
