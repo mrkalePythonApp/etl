@@ -46,11 +46,11 @@ class Params:
     """Global business parameters."""
 
     (
-        juser, jskccy
-    ) = (820, 1)
+        juser, jskccy, skeu, rows,
+    ) = (820, 1, 30.126, 0)
 
 class Source:
-    """Status parameters of the data source."""
+    """Parameters of the data source."""
 
     (
         file, wbook, wsheet, agenda,
@@ -58,11 +58,11 @@ class Source:
 
 
 class Target:
-    """Status parameters of the data target."""
+    """Parameters of the data target."""
 
     (
-        conn, query, cursor, table, database, root, register,
-    ) = (None, None, None, None, None, None, None,)
+        host, conn, query, cursor, table, database, root, register,
+    ) = (None, None, None, None, None, None, None, None,)
 
 
 @dataclasses.dataclass
@@ -84,6 +84,7 @@ class Column:
     desc: bool = False
 
     def reset(self):
+        """Initialize dynamic fields of a data record."""
         self.index = None
         self.value = None
         self.comment = None
@@ -93,6 +94,7 @@ class Agenda(ABC):
     """MS Excel agenda column set."""
 
     def __init__(self):
+        """Create the class instance - constructor."""
         self._columns: [Column] = []
 
     @property
@@ -122,28 +124,33 @@ class Agenda(ABC):
         return fields
 
     @property
-    def ins_fields(self):
+    def ins_fields(self) -> str:
+        """Comma separated list of table fields for insert SQL query."""
         return ','.join(self.dbfields.keys())
 
     @property
-    def ins_values(self):
+    def ins_values(self) -> str:
+        """Comma separated list of values placeholders for insert SQL."""
         return ','.join([f'%({k})s' for k in self.dbfields.keys()])
 
     @property
-    def header_row(self):
+    def header_row(self) -> int:
+        """Number of a header row in a workbook."""
         return self._row_header
 
     @header_row.setter
-    def header_row(self, colnum):
+    def header_row(self, colnum: int):
+        """Storing number of a header row in a workbook."""
         self._row_header = colnum
 
     @property
-    def coldefs(self):
+    def coldefs(self) -> int:
+        """Number of used columns in a workbook."""
         return self._columns
 
     @property
-    def columns(self):
-        """Calculate number of active columns in MS Excel sheet."""
+    def columns(self) -> int:
+        """Calculate number of used columns in a workbook."""
         cols = 0
         for col in self.coldefs:
             if col.index is not None:
@@ -151,35 +158,55 @@ class Agenda(ABC):
         return cols
 
     @property
-    def comments(self):
+    def comments(self) -> str:
+        """Cummulative comment from all workbook cells."""
         l = [c.comment.content for c in self.coldefs if c.comment]
         return '\n'.join(l)
 
     def reset(self):
+        """Reset all dynamic properties of all data fields of an agenda."""
         for col in self.coldefs:
             col.reset()
 
-    def set_column_index(self, title, colnum):
-        """Find column and set it column index."""
-        result = None
+    def set_column_index(self, title: str, colnum: int) -> int:
+        """Set index of a workbook column in an agenda record.
+
+        Arguments
+        ---------
+        title : string
+            Column header taken usually from the first workbook row.
+        colnum : int
+            Sequence number of a workbook column counting from 1.
+
+        Returns
+        -------
+        int
+            Index of a column determined by the input title in an agenda's
+            data record counting from 0 or None, if column is not found.
+
+        Notes
+        -----
+        - The method sanitizes the input title by substituting all new line
+          characters with space.
+
+        """
         title = title.replace('\n', ' ')
         for cn, col in enumerate(self.coldefs):
             if col.title == title:
                 col.index = colnum
-                result = cn
-                break
-        return result
+                return cn
 
     def check_row(self) -> bool:
+        """Test for all mandatory data fields on determined value."""
         for col in self.coldefs:
-            if not (col.optional or col.value):
+            if not (col.optional or col.value is not None):
                 return False
         return True
 
     def check_agenda(self) -> bool:
-        """Check presence of all mandatory columns
-        and at least one optional one.
-        
+        """Check presence of all mandatory data fields
+        and at least one optional one in a data record.
+
         """
         flag_mandatory_fields = True
         flag_optional_fields = False
@@ -190,19 +217,23 @@ class Agenda(ABC):
                 flag_optional_fields = True
         return flag_mandatory_fields and flag_optional_fields
 
-    def get_column_by_dbfield(self, dbfield):
-        """Find column object by database field in the target db."""
+    def get_column_by_dbfield(self, dbfield: str) -> Column:
+        """Find column object by database field name in the data record."""
         for col in self.coldefs:
             if col.dbfield == dbfield:
                 return col
 
-    def get_column_by_index(self, index):
-        """Find column object by column index in MS Excel."""
+    def get_column_by_index(self, index: int) -> Column:
+        """Find column object by column index in a workbook."""
         for col in self.coldefs:
             if col.index == index:
                 return col
 
-    def store_cell(self, cell, colnum):
+    def store_cell(self, cell: object, colnum: int) -> Column:
+        """Store value and comment from a workbook cell in a column
+        and return that column object for chaining.
+
+        """
         coldef = self.get_column_by_index(colnum)
         coldef.value = None
         coldef.comment = None
@@ -231,8 +262,12 @@ class Agenda(ABC):
                 cell.data_type,
                 coldef.title
             )
-        
-    def round_column(self, coldef):
+
+    def round_column(self, coldef: Column) -> Column:
+        """Round a data field value in a column definition, if it is of some
+        numeric type and rounding is declared in the column definition.
+
+        """
         if coldef.rounding and coldef.datatype in ['n', 'f']:
             coldef.value = round(coldef.value, coldef.rounding)
         return coldef
@@ -245,6 +280,8 @@ class Mimoriadne_prijmy(Agenda):
     """MS Excel workbook 'Mimoriadne príjmy.xlsx' column set."""
 
     def __init__(self):
+        """Definition of agenda workbook columns and their relation to target
+        database table columns."""
         self._columns = [
             Column('Dátum', 'd', 'date_on'),
             Column('Príjem', 's', 'title'),
@@ -289,12 +326,13 @@ class Konopa_income(Agenda):
     def agenda(self):
         return 'incomes'
 
-    def store_cell(self, cell, colnum):
+    def store_cell(self, cell: object, colnum: int) -> Column:
+        """Additional specific actions at storing a workbook cell."""
         coldef = super().store_cell(cell, colnum)
         if coldef and coldef.value:
             if coldef.dbfield == 'price_orig':
                 pricedef = self.get_column_by_dbfield('price')
-                pricedef.value = coldef.value / 30.126
+                pricedef.value = coldef.value / Params.skeu
                 self.round_column(pricedef)
                 ccydef = self.get_column_by_dbfield('id_currency')
                 ccydef.value = Params.jskccy
@@ -304,7 +342,7 @@ class Konopa_income(Agenda):
 ###############################################################################
 # MS Excel actions
 ###############################################################################
-def source_open():
+def source_open() -> bool:
     """Open a source MS Excel spreadsheet file.
 
     Returns
@@ -324,8 +362,8 @@ def source_open():
     return True
 
 
-def migrate_sheet():
-    """Migrate worksheet to target agenda.
+def migrate_sheet() -> bool:
+    """Migrate workbook to the target agenda.
 
     Returns
     -------
@@ -376,7 +414,7 @@ def migrate_sheet():
             rows += 1
         except mysql.Error as err:
             logger.error(err)
-            # return False
+    Params.rows += rows
     logger.info(
         'Migrated %d rows from sheet "%s"',
         rows,
@@ -387,7 +425,7 @@ def migrate_sheet():
 ###############################################################################
 # Database actions
 ###############################################################################
-def connect_db(config):
+def connect_db(config: dict) -> object:
     """Connect to a database.
 
     Arguments
@@ -420,7 +458,7 @@ def connect_db(config):
         raise
 
 
-def target_open():
+def target_open() -> bool:
     """Connect to a target database.
 
     Returns
@@ -430,6 +468,7 @@ def target_open():
 
     """
     # Connect to database
+    Target.host = db.target_config['host']
     Target.database = db.target_config['database']
     if Target.conn is None:
         try:
@@ -437,7 +476,7 @@ def target_open():
         except Exception:
             logger.error(
                 'Cannot connect to the target database "%s"',
-                Target.database
+                Target.database,
                 )
             return False
     # Truncate target table
@@ -534,8 +573,7 @@ def main():
     setup_params()
     setup_cmdline()
     setup_logger()
-    logger.info('Migration started')
-    # Connect to MS Excel
+    # Connect to MS Excel workbook
     if not source_open():
         return
     if cmdline.workbook == 'Mimoriadne príjmy.xlsx':
@@ -550,12 +588,20 @@ def main():
             Source.agenda.agenda)
     # Connect to target database
     if target_open():
-        # Process sheets
+        logger.info(
+            'START -- Migration to database table "%s//%s.%s"',
+            Target.host,
+            Target.database,
+            Target.table,
+            )
         for Source.wsheet in list(Source.wbook):
             migrate_sheet()
+        logger.info(
+            'STOP -- Migrated %d rows in total',
+            Params.rows,
+            )
     # Close databases
     target_close()
-    logger.info('Migration finished')
 
 
 if __name__ == '__main__':
