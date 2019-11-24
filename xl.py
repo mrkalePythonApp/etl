@@ -16,7 +16,7 @@ import logging
 import mysql.connector as mysql
 import openpyxl
 import datetime
-import dataclasses
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 # Custom library modules
@@ -65,13 +65,13 @@ class Target:
     ) = (None, None, None, None, None, None, None, None,)
 
 
-@dataclasses.dataclass
+@dataclass
 class Column:
     """MS Excel column definition of an agenda.
 
     - 'desc' determines that the column value is appended to the 'description'
        as comment and 'dbfield' is ignored.
-    
+
     """
     title: str
     datatype: str = 's'
