@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating agendas from MS Excel to Family Chronicle."""
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -96,6 +96,7 @@ class Agenda(ABC):
     def __init__(self):
         """Create the class instance - constructor."""
         self._columns: [Column] = []
+        self.reset_comments()
 
     @property
     @abstractmethod
@@ -114,7 +115,7 @@ class Agenda(ABC):
             'created_by': Params.juser,
             'modified': now,
             'modified_by': Params.juser,
-            'description': self.comments,
+            'description': self.comment,
         }
         fields = {col.dbfield: col.value \
             for col in self.coldefs \
@@ -158,15 +159,23 @@ class Agenda(ABC):
         return cols
 
     @property
-    def comments(self) -> str:
-        """Cummulative comment from all workbook cells."""
-        l = [c.comment.content for c in self.coldefs if c.comment]
-        return '\n'.join(l)
+    def comment(self) -> [str]:
+        """Compose a row comment from all workbook cells."""
+        return '<br>'.join(self._comments)
+
+    @comment.setter
+    def comment(self, text: str):
+        if text:
+            self._comments.append(text)
 
     def reset(self):
         """Reset all dynamic properties of all data fields of an agenda."""
         for col in self.coldefs:
             col.reset()
+
+    def reset_comments(self):
+        """Reset row comments."""
+        self._comments: [str] = []
 
     def set_column_index(self, title: str, colnum: int) -> int:
         """Set index of a workbook column in an agenda record.
@@ -199,8 +208,8 @@ class Agenda(ABC):
     def check_row(self) -> bool:
         """Test for all mandatory data fields on determined value."""
         for col in self.coldefs:
-            if not (col.optional or col.value is not None):
-                return False
+            if not (col.optional or col.desc or col.value is not None):
+                return False                
         return True
 
     def check_agenda(self) -> bool:
@@ -229,27 +238,37 @@ class Agenda(ABC):
             if col.index == index:
                 return col
 
+    def sanitize_comment(self, text: str) -> str:
+        """Cleanup cell comment."""
+        if text:
+            text = text.replace('Libor Gabaj:\n', '')
+        return text
+
     def store_cell(self, cell: object, colnum: int) -> Column:
         """Store value and comment from a workbook cell in a column
         and return that column object for chaining.
 
         """
         coldef = self.get_column_by_index(colnum)
-        coldef.value = None
-        coldef.comment = None
-        if coldef.desc:
-            coldef.comment = cell.comment
-            if cell.value:
-                coldef.comment.content = f'{coldef.title}: {cell.value}'
-                coldef.comment.content += ' ' + coldef.comment.content
-                print('A.', coldef.comment.content)
+        # Ignore unexpected column
+        if coldef is None:
             return
-        print(coldef.title, cell.value)
+        coldef.value = None
+        if coldef.desc:
+            c = []
+            if cell.value:
+                c.append(str(cell.value))
+            if cell.comment and cell.comment.content is not None:
+                c.append(self.sanitize_comment(cell.comment.content))
+            if len(c):
+                self.comment = f'{coldef.title}: {"; ".join(c)}'
+            return
         if not cell.value:
             return
         if cell.data_type == coldef.datatype:
             coldef.value = cell.value
-            coldef.comment = cell.comment
+            if cell.comment and cell.comment.content is not None:
+                self.comment = self.sanitize_comment(cell.comment.content)
             return self.round_column(coldef)
         else:
             logger.error(
@@ -282,6 +301,7 @@ class Mimoriadne_prijmy(Agenda):
     def __init__(self):
         """Definition of agenda workbook columns and their relation to target
         database table columns."""
+        super().__init__()
         self._columns = [
             Column('Dátum', 'd', 'date_on'),
             Column('Príjem', 's', 'title'),
@@ -310,6 +330,7 @@ class Konopa_income(Agenda):
     """MS Excel workbook 'Konopa_income.xlsx' column set."""
 
     def __init__(self):
+        super().__init__()
         self._columns = [
             Column('Dátum', 'd', 'date_on'),
             Column('Akcia', 's', 'title'),
@@ -329,7 +350,7 @@ class Konopa_income(Agenda):
     def store_cell(self, cell: object, colnum: int) -> Column:
         """Additional specific actions at storing a workbook cell."""
         coldef = super().store_cell(cell, colnum)
-        if coldef and coldef.value:
+        if coldef and coldef.value is not None:
             if coldef.dbfield == 'price_orig':
                 pricedef = self.get_column_by_dbfield('price')
                 pricedef.value = coldef.value / Params.skeu
@@ -352,7 +373,7 @@ def source_open() -> bool:
 
     """
     try:
-        Source.wbook = openpyxl.load_workbook(cmdline.workbook)
+        Source.wbook = openpyxl.load_workbook(cmdline.workbook, data_only=True)
     except Exception:
         logger.error(
             'Cannot open the MS Excel workbook %s',
@@ -395,6 +416,7 @@ def migrate_sheet() -> bool:
         min_row=a.header_row + 1,
         max_col=a.columns
     ):
+        a.reset_comments()
         # Process columns of a row
         for cn, cell in enumerate(row):
             a.store_cell(cell, cn)
@@ -407,7 +429,6 @@ def migrate_sheet() -> bool:
             fields=a.ins_fields,
             values=a.ins_values,
             )
-        print(Target.query)
         Target.cursor = Target.conn.cursor()
         try:
             Target.cursor.execute(Target.query, a.dbfields)
