@@ -396,6 +396,21 @@ class Konopa_rehearsal(Agenda):
         return coldef
 
 
+class Chalupa_events(Agenda):
+    """MS Excel workbook 'Chalupa_events.xlsx' column set."""
+
+    def __init__(self):
+        super().__init__()
+        self._columns = [
+            Column('Dátum', 'd', 'date_on'),
+            Column('Činnosť', 's', 'title'),
+        ]
+
+    @property
+    def agenda(self):
+        return 'events'
+
+
 ###############################################################################
 # MS Excel actions
 ###############################################################################
@@ -589,6 +604,7 @@ def setup_cmdline():
             'Mimoriadne príjmy.xlsx',
             'Konopa_income.xlsx',
             'Konopa_rehearsal.xlsx',
+            'Chalupa_events.xlsx',
             ],
         help='MS Excel workbook file.'
     )
@@ -646,6 +662,11 @@ def main():
             Source.agenda.agenda)
     if cmdline.workbook == 'Konopa_rehearsal.xlsx':
         Source.agenda = Konopa_rehearsal()
+        Target.table = sql.compose_table(
+            sql.target_table_prefix_agenda,
+            Source.agenda.agenda)
+    if cmdline.workbook == 'Chalupa_events.xlsx':
+        Source.agenda = Chalupa_events()
         Target.table = sql.compose_table(
             sql.target_table_prefix_agenda,
             Source.agenda.agenda)
