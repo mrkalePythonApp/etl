@@ -75,7 +75,7 @@ class Column:
     """
     title: str
     datatype: str = 's'
-    dbfield: str = ''
+    dbfield: str = None
     index: int = None
     optional: bool = False
     value: any = None
@@ -119,7 +119,7 @@ class Agenda(ABC):
         }
         fields = {col.dbfield: col.value \
             for col in self.coldefs \
-            if col.value and not col.desc
+            if col.value and col.dbfield
             }
         fields.update(common_fields)
         return fields
@@ -127,12 +127,14 @@ class Agenda(ABC):
     @property
     def ins_fields(self) -> str:
         """Comma separated list of table fields for insert SQL query."""
-        return ','.join(self.dbfields.keys())
-
+        fields = ','.join(self.dbfields.keys())
+        return fields
+    
     @property
     def ins_values(self) -> str:
         """Comma separated list of values placeholders for insert SQL."""
-        return ','.join([f'%({k})s' for k in self.dbfields.keys()])
+        values = ','.join([f'%({k})s' for k in self.dbfields.keys()])
+        return values
 
     @property
     def header_row(self) -> int:
@@ -224,7 +226,7 @@ class Agenda(ABC):
                 flag_mandatory_fields = False
             if col.optional and col.index is not None:
                 flag_optional_fields = True
-        return flag_mandatory_fields and flag_optional_fields
+        return flag_mandatory_fields or flag_optional_fields
 
     def get_column_by_dbfield(self, dbfield: str) -> Column:
         """Find column object by database field name in the data record."""
@@ -257,14 +259,15 @@ class Agenda(ABC):
         if coldef.desc:
             c = []
             if cell.value:
+                coldef.value = cell.value
                 c.append(str(cell.value))
             if cell.comment and cell.comment.content is not None:
                 c.append(self.sanitize_comment(cell.comment.content))
             if len(c):
                 self.comment = f'{coldef.title}: {"; ".join(c)}'
-            return
+            return coldef
         if not cell.value:
-            return
+            return coldef
         if cell.data_type == coldef.datatype:
             coldef.value = cell.value
             if cell.comment and cell.comment.content is not None:
@@ -281,6 +284,7 @@ class Agenda(ABC):
                 cell.data_type,
                 coldef.title
             )
+            return coldef
 
     def round_column(self, coldef: Column) -> Column:
         """Round a data field value in a column definition, if it is of some
@@ -357,6 +361,38 @@ class Konopa_income(Agenda):
                 self.round_column(pricedef)
                 ccydef = self.get_column_by_dbfield('id_currency')
                 ccydef.value = Params.jskccy
+        return coldef
+
+
+class Konopa_rehearsal(Agenda):
+    """MS Excel workbook 'Konopa_rehearsal.xlsx' column set."""
+
+    def __init__(self):
+        super().__init__()
+        self._columns = [
+            Column('Dátum', 'd', 'date_on'),
+            Column('Akcia', 's', 'title'),
+            Column('Miesto', desc=True),
+            Column('Čas', 'n', 'duration', desc=True),
+            Column('Hráčov', 'n', desc=True),
+            Column('Poznámka', desc=True),
+        ]
+
+    @property
+    def agenda(self):
+        return 'events'
+
+    def store_cell(self, cell: object, colnum: int) -> Column:
+        """Additional specific actions at storing a workbook cell."""
+        coldef = super().store_cell(cell, colnum)
+        if coldef and coldef.value is not None:
+            if coldef.title == 'Čas':
+                format_time = '%H:%M'
+                times = coldef.value.split('-')
+                start = datetime.datetime.strptime(times[0].strip(), format_time)
+                stop = datetime.datetime.strptime(times[1].strip(), format_time)
+                # Convert duration to quarters of an hour
+                coldef.value = (stop - start).total_seconds() // 900 * 0.25
         return coldef
 
 
@@ -552,6 +588,7 @@ def setup_cmdline():
         choices=[
             'Mimoriadne príjmy.xlsx',
             'Konopa_income.xlsx',
+            'Konopa_rehearsal.xlsx',
             ],
         help='MS Excel workbook file.'
     )
@@ -604,6 +641,11 @@ def main():
             Source.agenda.agenda)
     if cmdline.workbook == 'Konopa_income.xlsx':
         Source.agenda = Konopa_income()
+        Target.table = sql.compose_table(
+            sql.target_table_prefix_agenda,
+            Source.agenda.agenda)
+    if cmdline.workbook == 'Konopa_rehearsal.xlsx':
+        Source.agenda = Konopa_rehearsal()
         Target.table = sql.compose_table(
             sql.target_table_prefix_agenda,
             Source.agenda.agenda)
