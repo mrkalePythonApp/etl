@@ -15,13 +15,12 @@ import argparse
 import logging
 import mysql.connector as mysql
 import openpyxl
-import datetime
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from importlib import util as imp
 
 # Custom library modules
 import dbconfig as db
 import sql
+from xl_agenda import Params, Source, Agenda
 
 
 ###############################################################################
@@ -42,373 +41,12 @@ class Script:
     ) = ('', '', '',)
 
 
-class Params:
-    """Global business parameters."""
-
-    (
-        juser, jskccy, skeu, rows,
-    ) = (820, 1, 30.126, 0)
-
-class Source:
-    """Parameters of the data source."""
-
-    (
-        file, wbook, wsheet, agenda,
-    ) = (None, None, None, None)
-
-
 class Target:
     """Parameters of the data target."""
 
     (
         host, conn, query, cursor, table, database, root, register,
     ) = (None, None, None, None, None, None, None, None,)
-
-
-@dataclass
-class Column:
-    """MS Excel column definition of an agenda.
-
-    - 'desc' determines that the column value is appended to the 'description'
-       as comment and 'dbfield' is ignored.
-
-    """
-    title: str
-    datatype: str = 's'
-    dbfield: str = None
-    index: int = None
-    optional: bool = False
-    value: any = None
-    comment: str = None
-    rounding: int = None
-    desc: bool = False
-
-    def reset(self):
-        """Initialize dynamic fields of a data record."""
-        self.index = None
-        self.value = None
-        self.comment = None
-
-
-class Agenda(ABC):
-    """MS Excel agenda column set."""
-
-    def __init__(self):
-        """Create the class instance - constructor."""
-        self._columns: [Column] = []
-        self.reset_comments()
-
-    @property
-    @abstractmethod
-    def agenda(self):
-        ...
-
-    @property
-    def dbfields(self):
-        now = datetime.datetime.now()
-        common_fields = {
-            'params': '',
-            'metakey': '',
-            'metadesc': '',
-            'metadata': '',
-            'created': now,
-            'created_by': Params.juser,
-            'modified': now,
-            'modified_by': Params.juser,
-            'description': self.comment,
-        }
-        fields = {col.dbfield: col.value \
-            for col in self.coldefs \
-            if col.value and col.dbfield
-            }
-        fields.update(common_fields)
-        return fields
-
-    @property
-    def ins_fields(self) -> str:
-        """Comma separated list of table fields for insert SQL query."""
-        fields = ','.join(self.dbfields.keys())
-        return fields
-    
-    @property
-    def ins_values(self) -> str:
-        """Comma separated list of values placeholders for insert SQL."""
-        values = ','.join([f'%({k})s' for k in self.dbfields.keys()])
-        return values
-
-    @property
-    def header_row(self) -> int:
-        """Number of a header row in a workbook."""
-        return self._row_header
-
-    @header_row.setter
-    def header_row(self, colnum: int):
-        """Storing number of a header row in a workbook."""
-        self._row_header = colnum
-
-    @property
-    def coldefs(self) -> int:
-        """Number of used columns in a workbook."""
-        return self._columns
-
-    @property
-    def columns(self) -> int:
-        """Calculate number of used columns in a workbook."""
-        cols = 0
-        for col in self.coldefs:
-            if col.index is not None:
-                cols += 1
-        return cols
-
-    @property
-    def comment(self) -> [str]:
-        """Compose a row comment from all workbook cells."""
-        return '<br>'.join(self._comments)
-
-    @comment.setter
-    def comment(self, text: str):
-        if text:
-            self._comments.append(text)
-
-    def reset(self):
-        """Reset all dynamic properties of all data fields of an agenda."""
-        for col in self.coldefs:
-            col.reset()
-
-    def reset_comments(self):
-        """Reset row comments."""
-        self._comments: [str] = []
-
-    def set_column_index(self, title: str, colnum: int) -> int:
-        """Set index of a workbook column in an agenda record.
-
-        Arguments
-        ---------
-        title : string
-            Column header taken usually from the first workbook row.
-        colnum : int
-            Sequence number of a workbook column counting from 1.
-
-        Returns
-        -------
-        int
-            Index of a column determined by the input title in an agenda's
-            data record counting from 0 or None, if column is not found.
-
-        Notes
-        -----
-        - The method sanitizes the input title by substituting all new line
-          characters with space.
-
-        """
-        title = title.replace('\n', ' ')
-        for cn, col in enumerate(self.coldefs):
-            if col.title == title:
-                col.index = colnum
-                return cn
-
-    def check_row(self) -> bool:
-        """Test for all mandatory data fields on determined value."""
-        for col in self.coldefs:
-            if not (col.optional or col.desc or col.value is not None):
-                return False                
-        return True
-
-    def check_agenda(self) -> bool:
-        """Check presence of all mandatory data fields
-        and at least one optional one in a data record.
-
-        """
-        flag_mandatory_fields = True
-        flag_optional_fields = False
-        for col in self.coldefs:
-            if not col.optional and col.index is None:
-                flag_mandatory_fields = False
-            if col.optional and col.index is not None:
-                flag_optional_fields = True
-        return flag_mandatory_fields or flag_optional_fields
-
-    def get_column_by_dbfield(self, dbfield: str) -> Column:
-        """Find column object by database field name in the data record."""
-        for col in self.coldefs:
-            if col.dbfield == dbfield:
-                return col
-
-    def get_column_by_index(self, index: int) -> Column:
-        """Find column object by column index in a workbook."""
-        for col in self.coldefs:
-            if col.index == index:
-                return col
-
-    def sanitize_comment(self, text: str) -> str:
-        """Cleanup cell comment."""
-        if text:
-            text = text.replace('Libor Gabaj:\n', '')
-        return text
-
-    def store_cell(self, cell: object, colnum: int) -> Column:
-        """Store value and comment from a workbook cell in a column
-        and return that column object for chaining.
-
-        """
-        coldef = self.get_column_by_index(colnum)
-        # Ignore unexpected column
-        if coldef is None:
-            return
-        coldef.value = None
-        if coldef.desc:
-            c = []
-            if cell.value:
-                coldef.value = cell.value
-                c.append(str(cell.value))
-            if cell.comment and cell.comment.content is not None:
-                c.append(self.sanitize_comment(cell.comment.content))
-            if len(c):
-                self.comment = f'{coldef.title}: {"; ".join(c)}'
-            return coldef
-        if not cell.value:
-            return coldef
-        if cell.data_type == coldef.datatype:
-            coldef.value = cell.value
-            if cell.comment and cell.comment.content is not None:
-                self.comment = self.sanitize_comment(cell.comment.content)
-            return self.round_column(coldef)
-        else:
-            logger.error(
-                'Ignored cell "%s!%s%s" ' \
-                'with unexpected data type "%s" ' \
-                'for column "%s"',
-                Source.wsheet.title,
-                cell.column_letter,
-                cell.row,
-                cell.data_type,
-                coldef.title
-            )
-            return coldef
-
-    def round_column(self, coldef: Column) -> Column:
-        """Round a data field value in a column definition, if it is of some
-        numeric type and rounding is declared in the column definition.
-
-        """
-        if coldef.rounding and coldef.datatype in ['n', 'f']:
-            coldef.value = round(coldef.value, coldef.rounding)
-        return coldef
-
-
-###############################################################################
-# Sources definitions
-###############################################################################
-class Mimoriadne_prijmy(Agenda):
-    """MS Excel workbook 'Mimoriadne príjmy.xlsx' column set."""
-
-    def __init__(self):
-        """Definition of agenda workbook columns and their relation to target
-        database table columns."""
-        super().__init__()
-        self._columns = [
-            Column('Dátum', 'd', 'date_on'),
-            Column('Príjem', 's', 'title'),
-            Column('Suma €', 'n', 'price', optional=True, rounding=2),
-            Column('Suma Sk', 'n', 'price_orig', optional=True, rounding=2),
-            Column('Currency', 'n', 'id_currency', optional=True),
-        ]
-
-    @property
-    def agenda(self):
-        return 'incomes'
-
-    def store_cell(self, cell, colnum):
-        coldef = super().store_cell(cell, colnum)
-        if coldef and coldef.value:
-            if coldef.dbfield == 'price_orig':
-                pricedef = self.get_column_by_dbfield('price')
-                pricedef.value = coldef.value / 30.126
-                self.round_column(pricedef)
-                ccydef = self.get_column_by_dbfield('id_currency')
-                ccydef.value = Params.jskccy
-        return coldef
-
-
-class Konopa_income(Agenda):
-    """MS Excel workbook 'Konopa_income.xlsx' column set."""
-
-    def __init__(self):
-        super().__init__()
-        self._columns = [
-            Column('Dátum', 'd', 'date_on'),
-            Column('Akcia', 's', 'title'),
-            Column('Miesto', desc=True),
-            Column('Čas', desc=True),
-            Column('Hráčov', 'n', desc=True),
-            Column('Môj honorár €', 'n', 'price', optional=True, rounding=2),
-            Column('Môj honorár Sk', 'n', 'price_orig', optional=True, rounding=2),
-            Column('Poznámka', desc=True),
-            Column('Currency', 'n', 'id_currency', optional=True),
-        ]
-
-    @property
-    def agenda(self):
-        return 'incomes'
-
-    def store_cell(self, cell: object, colnum: int) -> Column:
-        """Additional specific actions at storing a workbook cell."""
-        coldef = super().store_cell(cell, colnum)
-        if coldef and coldef.value is not None:
-            if coldef.dbfield == 'price_orig':
-                pricedef = self.get_column_by_dbfield('price')
-                pricedef.value = coldef.value / Params.skeu
-                self.round_column(pricedef)
-                ccydef = self.get_column_by_dbfield('id_currency')
-                ccydef.value = Params.jskccy
-        return coldef
-
-
-class Konopa_rehearsal(Agenda):
-    """MS Excel workbook 'Konopa_rehearsal.xlsx' column set."""
-
-    def __init__(self):
-        super().__init__()
-        self._columns = [
-            Column('Dátum', 'd', 'date_on'),
-            Column('Akcia', 's', 'title'),
-            Column('Miesto', desc=True),
-            Column('Čas', 'n', 'duration', desc=True),
-            Column('Hráčov', 'n', desc=True),
-            Column('Poznámka', desc=True),
-        ]
-
-    @property
-    def agenda(self):
-        return 'events'
-
-    def store_cell(self, cell: object, colnum: int) -> Column:
-        """Additional specific actions at storing a workbook cell."""
-        coldef = super().store_cell(cell, colnum)
-        if coldef and coldef.value is not None:
-            if coldef.title == 'Čas':
-                format_time = '%H:%M'
-                times = coldef.value.split('-')
-                start = datetime.datetime.strptime(times[0].strip(), format_time)
-                stop = datetime.datetime.strptime(times[1].strip(), format_time)
-                # Convert duration to quarters of an hour
-                coldef.value = (stop - start).total_seconds() // 900 * 0.25
-        return coldef
-
-
-class Chalupa_events(Agenda):
-    """MS Excel workbook 'Chalupa_events.xlsx' column set."""
-
-    def __init__(self):
-        super().__init__()
-        self._columns = [
-            Column('Dátum', 'd', 'date_on'),
-            Column('Činnosť', 's', 'title'),
-        ]
-
-    @property
-    def agenda(self):
-        return 'events'
 
 
 ###############################################################################
@@ -424,11 +62,11 @@ def source_open() -> bool:
 
     """
     try:
-        Source.wbook = openpyxl.load_workbook(cmdline.workbook, data_only=True)
+        Source.wbook = openpyxl.load_workbook(Source.agenda.excel, data_only=True)
     except Exception:
         logger.error(
-            'Cannot open the MS Excel workbook %s',
-            cmdline.workbook
+            'Cannot open the MS Excel workbook "%s"',
+            Source.agenda.excel
         )
         return False
     return True
@@ -600,13 +238,7 @@ def setup_cmdline():
     # Position arguments
     parser.add_argument(
         'workbook',
-        choices=[
-            'Mimoriadne príjmy.xlsx',
-            'Konopa_income.xlsx',
-            'Konopa_rehearsal.xlsx',
-            'Chalupa_events.xlsx',
-            ],
-        help='MS Excel workbook file.'
+        help='MS Excel workbook definition module name.'
     )
     # Options
     parser.add_argument(
@@ -647,30 +279,25 @@ def main():
     setup_params()
     setup_cmdline()
     setup_logger()
+    # Import plugin module
+    module_name = cmdline.workbook
+    file_path = f'{Script.name}_{module_name}.py'
+    try:
+        spec = imp.spec_from_file_location(module_name, file_path)
+        plugin = imp.module_from_spec(spec)
+        spec.loader.exec_module(plugin)
+    except Exception:
+        logger.error( 'Cannot load module "%s"', file_path)
+        return
     # Connect to MS Excel workbook
+    Source.agenda = plugin.workbook()
+    Source.agenda.logger = logger
     if not source_open():
         return
-    if cmdline.workbook == 'Mimoriadne príjmy.xlsx':
-        Source.agenda = Mimoriadne_prijmy()
-        Target.table = sql.compose_table(
-            sql.target_table_prefix_agenda,
-            Source.agenda.agenda)
-    if cmdline.workbook == 'Konopa_income.xlsx':
-        Source.agenda = Konopa_income()
-        Target.table = sql.compose_table(
-            sql.target_table_prefix_agenda,
-            Source.agenda.agenda)
-    if cmdline.workbook == 'Konopa_rehearsal.xlsx':
-        Source.agenda = Konopa_rehearsal()
-        Target.table = sql.compose_table(
-            sql.target_table_prefix_agenda,
-            Source.agenda.agenda)
-    if cmdline.workbook == 'Chalupa_events.xlsx':
-        Source.agenda = Chalupa_events()
-        Target.table = sql.compose_table(
-            sql.target_table_prefix_agenda,
-            Source.agenda.agenda)
     # Connect to target database
+    Target.table = sql.compose_table(
+        sql.target_table_prefix_agenda,
+        Source.agenda.agenda)
     if target_open():
         logger.info(
             'START -- Migration to database table "%s//%s.%s"',
