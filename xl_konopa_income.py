@@ -25,8 +25,7 @@ class workbook(Agenda):
             Column('Čas', desc=True),
             Column('Hráčov', 'n', desc=True),
             Column('Môj honorár €', 'n', 'price', optional=True, rounding=2),
-            Column('Môj honorár Sk', 'n', 'price_orig',
-                   optional=True, rounding=2),
+            Column('Môj honorár Sk', 'n', 'price_orig', optional=True, rounding=2),
             Column('Poznámka', desc=True),
             Column('Currency', 'n', 'id_currency', optional=True),
         ]

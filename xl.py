@@ -105,7 +105,7 @@ def migrate_sheet() -> bool:
         min_row=a.header_row + 1,
         max_col=a.columns
     ):
-        a.reset_comments()
+        a.reset(values_only=True)
         # Process columns of a row
         for cn, cell in enumerate(row):
             a.store_cell(cell, cn)

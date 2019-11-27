@@ -52,11 +52,12 @@ class Column:
     rounding: int = None
     desc: bool = False
 
-    def reset(self):
+    def reset(self, values_only=False):
         """Initialize dynamic fields of a data record."""
-        self.index = None
         self.value = None
         self.comment = None
+        if not values_only:
+            self.index = None
 
 
 class Agenda(ABC):
@@ -66,7 +67,7 @@ class Agenda(ABC):
         """Create the class instance - constructor."""
         self._logger = None
         self._columns: [Column] = []
-        self.reset_comments()
+        self._comments: [str] = []
 
     @property
     @abstractmethod
@@ -153,14 +154,11 @@ class Agenda(ABC):
         if text:
             self._comments.append(text)
 
-    def reset(self):
+    def reset(self, values_only=False):
         """Reset all dynamic properties of all data fields of an agenda."""
-        for col in self.coldefs:
-            col.reset()
-
-    def reset_comments(self):
-        """Reset row comments."""
         self._comments: [str] = []
+        for col in self.coldefs:
+            col.reset(values_only)
 
     def set_column_index(self, title: str, colnum: int) -> int:
         """Set index of a workbook column in an agenda record.
