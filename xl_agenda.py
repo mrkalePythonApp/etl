@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module with general agenda definition."""
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -136,15 +136,6 @@ class Agenda(ABC):
         return self._columns
 
     @property
-    def columns(self) -> int:
-        """Calculate number of used columns in a workbook."""
-        cols = 0
-        for col in self.coldefs:
-            if col.index is not None:
-                cols += 1
-        return cols
-
-    @property
     def comment(self) -> [str]:
         """Compose a row comment from all workbook cells."""
         return '<br>'.join(self._comments)
@@ -227,6 +218,15 @@ class Agenda(ABC):
             text = text.replace('Libor Gabaj:\n', '')
         return text
 
+    def round_column(self, coldef: Column) -> Column:
+        """Round a data field value in a column definition, if it is of some
+        numeric type and rounding is declared in the column definition.
+
+        """
+        if coldef.rounding and coldef.datatype in ['n', 'f']:
+            coldef.value = round(coldef.value, coldef.rounding)
+        return coldef
+
     def store_cell(self, cell: object, colnum: int) -> Column:
         """Store value and comment from a workbook cell in a column
         and return that column object for chaining.
@@ -272,12 +272,3 @@ class Agenda(ABC):
                 coldef.title
             )
             return coldef
-
-    def round_column(self, coldef: Column) -> Column:
-        """Round a data field value in a column definition, if it is of some
-        numeric type and rounding is declared in the column definition.
-
-        """
-        if coldef.rounding and coldef.datatype in ['n', 'f']:
-            coldef.value = round(coldef.value, coldef.rounding)
-        return coldef

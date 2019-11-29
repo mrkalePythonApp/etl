@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating agendas from MS Excel to Family Chronicle."""
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
@@ -22,17 +22,11 @@ import dbconfig as db
 import sql
 from xl_agenda import Params, Source, Agenda
 
-
-###############################################################################
 # Script global variables
-###############################################################################
 cmdline = None  # Object with command line arguments
 logger = None  # Object with standard logging
 
-
-###############################################################################
 # Enumeration and parameter classes
-###############################################################################
 class Script:
     """Script parameters."""
 
@@ -49,9 +43,7 @@ class Target:
     ) = (None, None, None, None, None, None, None, None,)
 
 
-###############################################################################
 # MS Excel actions
-###############################################################################
 def source_open() -> bool:
     """Open a source MS Excel spreadsheet file.
 
@@ -72,6 +64,9 @@ def source_open() -> bool:
     return True
 
 
+###############################################################################
+# Migration
+###############################################################################
 def migrate_sheet() -> bool:
     """Migrate workbook to the target agenda.
 
@@ -101,10 +96,7 @@ def migrate_sheet() -> bool:
         return False
     # Data rows
     rows = 0
-    for row in Source.wsheet.iter_rows(
-        min_row=a.header_row + 1,
-        max_col=a.columns
-    ):
+    for row in Source.wsheet.iter_rows(min_row=a.header_row + 1):
         a.reset(values_only=True)
         # Process columns of a row
         for cn, cell in enumerate(row):
@@ -132,9 +124,7 @@ def migrate_sheet() -> bool:
     )
 
 
-###############################################################################
 # Database actions
-###############################################################################
 def connect_db(config: dict) -> object:
     """Connect to a database.
 
