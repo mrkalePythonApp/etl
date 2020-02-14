@@ -13,31 +13,28 @@ __email__ = 'libor.gabaj@gmail.com'
 import os
 import argparse
 import logging
+from typing import Optional, NoReturn
+from importlib import util as imp
 import mysql.connector as mysql
 import openpyxl
-from importlib import util as imp
 
 # Custom library modules
 import dbconfig as db
 import sql
-from xl_agenda import Params, Source, Agenda
-
-# Script global variables
-cmdline = None  # Object with command line arguments
-logger = None  # Object with standard logging
+from xl_agenda import Params, Source
 
 # Enumeration and parameter classes
 class Script:
     """Script parameters."""
+    (fullname, basename, name) = (None, None, None)
 
-    (
-        fullname, basename, name,
-    ) = ('', '', '',)
+class Actuator:
+    """Objects of respective processors."""
+    (cmdline, logger) = (None, None)
 
 
 class Target:
     """Parameters of the data target."""
-
     (
         host, conn, query, cursor, table, database, root, register,
     ) = (None, None, None, None, None, None, None, None,)
@@ -45,21 +42,15 @@ class Target:
 
 # MS Excel actions
 def source_open() -> bool:
-    """Open a source MS Excel spreadsheet file.
-
-    Returns
-    -------
-    boolean
-        Flag about successful processing.
-
-    """
+    """Open a source MS Excel spreadsheet file and return success flag."""
     try:
-        Source.wbook = openpyxl.load_workbook(Source.agenda.excel, data_only=True)
-    except Exception:
-        logger.error(
-            'Cannot open the MS Excel workbook "%s"',
-            Source.agenda.excel
-        )
+        Source.wbook = openpyxl.load_workbook(Source.agenda.excel,
+                                              data_only=True)
+    except Exception as errmsg:
+        log = \
+            f'Cannot open MS Excel workbook "{Source.agenda.excel}"' \
+            f': {errmsg}'
+        Actuator.logger.exception(log)
         return False
     return True
 
@@ -68,94 +59,69 @@ def source_open() -> bool:
 # Migration
 ###############################################################################
 def migrate_sheet() -> bool:
-    """Migrate workbook to the target agenda.
-
-    Returns
-    -------
-    boolean
-        Flag about successful processing.
-
-    """
-    a = Source.agenda
-    a.reset()
+    """Migrate workbook to the target agenda and return success flag."""
+    agn = Source.agenda
+    agn.reset()
     # Header row - First one with non-empty first column
     for row in Source.wsheet.iter_rows(min_row=1):
         cell = row[0]
         if cell.value:
-            a.header_row = cell.row
-            for cn, cell in enumerate(row):
-                a.set_column_index(cell.value, cn)
-            if not a.check_agenda():
-                msg = 'Uknown agenda structure'
-                logger.error(msg)
+            agn.header_row = cell.row
+            for cellnum, cell in enumerate(row):
+                agn.set_column_index(cell.value, cellnum)
+            if not agn.check_agenda():
+                log = 'Uknown agenda structure'
+                Actuator.logger.error(log)
                 return False
             break
-    if not a.header_row:
-        msg = 'No header row detected.'
-        logger.error(msg)
+    if not agn.header_row:
+        log = 'No header row detected.'
+        Actuator.logger.error(log)
         return False
     # Data rows
     rows = 0
-    for row in Source.wsheet.iter_rows(min_row=a.header_row + 1):
-        a.reset(values_only=True)
+    for row in Source.wsheet.iter_rows(min_row=agn.header_row + 1):
+        agn.reset(values_only=True)
         # Process columns of a row
-        for cn, cell in enumerate(row):
-            a.store_cell(cell, cn)
+        for cellnum, cell in enumerate(row):
+            agn.store_cell(cell, cellnum)
         # Ignore row with empty date column
-        if not a.check_row():
+        if not agn.check_row():
             continue
         # Insert row to target table
         Target.query = sql.compose_insert(
             table=Target.table,
-            fields=a.ins_fields,
-            values=a.ins_values,
+            fields=agn.ins_fields,
+            values=agn.ins_values,
             )
         Target.cursor = Target.conn.cursor()
         try:
-            Target.cursor.execute(Target.query, a.dbfields)
+            Target.cursor.execute(Target.query, agn.dbfields)
             rows += 1
         except mysql.Error as err:
-            logger.error(err)
+            Actuator.logger.error(err)
     Params.rows += rows
-    logger.info(
-        'Migrated %d rows from sheet "%s"',
-        rows,
-        Source.wsheet.title,
-    )
+    log = f'Migrated {rows} rows from sheet "{Source.wsheet.title}"'
+    Actuator.logger.info(log)
+    return True
 
 
 # Database actions
-def connect_db(config: dict) -> object:
-    """Connect to a database.
-
-    Arguments
-    ---------
-    config : dict
-        Connection configuration to a database.
-
-    Returns
-    -------
-    connection : object
-        Connection object to a database.
-
-    Raises
-    -------
-    mysql.connector.Error
-        Native exception of the database connector.
-
-    """
+def connect_db(config: dict) -> Optional[object]:
+    """Connect to a database and return connection."""
     try:
         conn = mysql.connect(**config)
-        logger.info('Database "%s" connected', config['database'])
+        dbname = config['database']
+        log = f'Database "{dbname}" connected'
+        Actuator.logger.info(log)
         return conn
     except mysql.Error as err:
+        log = str(err)
         if err.errno == mysql.errorcode.ER_ACCESS_DENIED_ERROR:
-            logger.error('Bad database "%s" credentials', config['database'])
+            log = f'Bad database "{dbname}" credentials'
         elif err.errno == mysql.errorcode.ER_BAD_DB_ERROR:
-            logger.error('Database "%s" does not exist', config['database'])
-        else:
-            logger.error(err)
-        raise
+            log = f'Database "{dbname}" does not exist'
+        Actuator.logger.error(log)
 
 
 def target_open() -> bool:
@@ -171,26 +137,19 @@ def target_open() -> bool:
     Target.host = db.target_config['host']
     Target.database = db.target_config['database']
     if Target.conn is None:
-        try:
-            Target.conn = connect_db(db.target_config)
-        except Exception:
-            logger.error(
-                'Cannot connect to the target database "%s"',
-                Target.database,
-                )
+        Target.conn = connect_db(db.target_config)
+        if  Target.conn is None:
             return False
     # Truncate target table
     Target.query = sql.compose_truncate(Target.table)
     Target.cursor = Target.conn.cursor()
     try:
         Target.cursor.execute(Target.query)
-        logger.info(
-            'Table "%s.%s" truncated',
-            Target.database,
-            Target.table
-        )
+        log = f'Table "{Target.database}.{Target.table}" truncated'
+        Actuator.logger.info(log)
     except mysql.Error as err:
-        logger.error(err)
+        log = str(err)
+        Actuator.logger.error(log)
         return False
     return True
 
@@ -250,18 +209,16 @@ def setup_cmdline():
         help='Joomla! user id for migration, default: ' + str(Params.juser)
     )
     # Process command line arguments
-    global cmdline
-    cmdline = parser.parse_args()
+    Actuator.cmdline = parser.parse_args()
 
 
 def setup_logger():
     """Configure logging facility."""
-    global logger
     logging.basicConfig(
-        level=getattr(logging, cmdline.verbose.upper()),
+        level=getattr(logging, Actuator.cmdline.verbose.upper()),
         format='%(levelname)s:%(name)s: %(message)s',
     )
-    logger = logging.getLogger(Script.name)
+    Actuator.logger = logging.getLogger(Script.name)
 
 
 def main():
@@ -270,18 +227,19 @@ def main():
     setup_cmdline()
     setup_logger()
     # Import plugin module
-    module_name = cmdline.workbook
+    module_name = Actuator.cmdline.workbook
     file_path = f'{Script.name}_{module_name}.py'
     try:
         spec = imp.spec_from_file_location(module_name, file_path)
         plugin = imp.module_from_spec(spec)
         spec.loader.exec_module(plugin)
-    except Exception:
-        logger.error( 'Cannot load module "%s"', file_path)
+    except Exception as errmsg:
+        log = f'Cannot load module "{file_path}": {errmsg}'
+        Actuator.logger.exception(log)
         return
     # Connect to MS Excel workbook
     Source.agenda = plugin.workbook()
-    Source.agenda.logger = logger
+    Source.agenda.logger = Actuator.logger
     if not source_open():
         return
     # Connect to target database
@@ -289,18 +247,14 @@ def main():
         sql.target_table_prefix_agenda,
         Source.agenda.agenda)
     if target_open():
-        logger.info(
-            'START -- Migration to database table "%s//%s.%s"',
-            Target.host,
-            Target.database,
-            Target.table,
-            )
+        log = \
+            f'START -- Migration to database table' \
+            f' "{Target.host}//{Target.database}.{Target.table}"'
+        Actuator.logger.info(log)
         for Source.wsheet in list(Source.wbook):
             migrate_sheet()
-        logger.info(
-            'STOP -- Migrated %d rows in total',
-            Params.rows,
-            )
+        log = f'STOP -- Migrated {Params.rows} rows in total'
+        Actuator.logger.info(log)
     # Close databases
     target_close()
 
