@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Module with general agenda definition."""
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
-__copyright__ = 'Copyright 2019, ' + __author__
+__copyright__ = 'Copyright 2019-2020, ' + __author__
 __credits__ = [__author__]
 __license__ = 'MIT'
 __maintainer__ = __author__
@@ -16,14 +16,15 @@ import datetime
 # Custom modules
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from enum import Enum
 
 
 class Params:
     """Global business parameters."""
 
     (
-        juser, jskccy, skeu, rows,
-    ) = (820, 1, 30.126, 0)
+        juser, jskccy, skeu,
+    ) = (820, 1, 30.126)
 
 
 class Source:

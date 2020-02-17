@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Script for migrating agendas from MS Excel to Family Chronicle."""
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
-__copyright__ = 'Copyright 2019, ' + __author__
+__copyright__ = 'Copyright 2019-2020, ' + __author__
 __credits__ = [__author__]
 __license__ = 'MIT'
 __maintainer__ = __author__
