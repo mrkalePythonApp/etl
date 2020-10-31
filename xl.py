@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script for migrating agendas from MS Excel to Family Chronicle."""
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019-2020, ' + __author__
@@ -100,7 +100,7 @@ def migrate_sheet() -> bool:
             rows += 1
         except mysql.Error as err:
             Actuator.logger.error(err)
-    Params.rows += rows
+    Source.rows += rows
     log = f'Migrated {rows} rows from sheet "{Source.wsheet.title}"'
     Actuator.logger.info(log)
     return True
@@ -187,7 +187,8 @@ def setup_cmdline():
     # Position arguments
     parser.add_argument(
         'workbook',
-        help='MS Excel workbook definition module name.'
+        help='Module name without prefix "xl_" and extension' \
+            ' for corresponding MS Excel workbook, e.g., "chalupa_events".'
     )
     # Options
     parser.add_argument(
@@ -253,7 +254,7 @@ def main():
         Actuator.logger.info(log)
         for Source.wsheet in list(Source.wbook):
             migrate_sheet()
-        log = f'STOP -- Migrated {Params.rows} rows in total'
+        log = f'STOP -- Migrated {Source.rows} rows in total'
         Actuator.logger.info(log)
     # Close databases
     target_close()

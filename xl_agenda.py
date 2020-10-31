@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Module with general agenda definition."""
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019-2020, ' + __author__
@@ -31,8 +31,8 @@ class Source:
     """Parameters of the data source."""
 
     (
-        file, wbook, wsheet, agenda,
-    ) = (None, None, None, None)
+        file, wbook, wsheet, agenda, rows,
+    ) = (None, None, None, None, 0)
 
 
 @dataclass
